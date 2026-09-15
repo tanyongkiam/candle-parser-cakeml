@@ -1,0 +1,66 @@
+(* OpID and pattern conversion from semantics/cmlPtreeConversionScript.sml. *)
+structure CakePatterns = struct
+  open CakeExpressionSupport;
+  fun etoPat e = case e of Ast.Con cn [] => Some (Ast.Pcon cn [])
+    | Ast.Ident (Ast.Short n) => Some (Ast.Pvar n)
+    | Ast.Ident (Ast.Long s n) => Some (Ast.Pcon (Some (Ast.Long s n)) [])
+    | _ => None;
+  fun ptree_OpID pt = bind (node NOpID pt) (fn xs => case xs of [p] =>
+    bind (token p) (fn tk =>
+      let fun classify pred id s = bind (pred s) (fn b => Some
+            (if b then Ast.Con (Some id) [] else Ast.Ident id))
+      in case tk of AlphaT s => classify isConstructor (Ast.Short s) s
+        | SymbolT s => classify isSymbolicConstructor (Ast.Short s) s
+        | LongidT path s => classify isConstructor (long_short path s) s
+        | StarT => classify isSymbolicConstructor (Ast.Short "*") "*"
+        | EqualsT => Some (Ast.Ident (Ast.Short "=")) | _ => None end) | _ => None);
+  fun ptree_Pattern nt pt = bind (node nt pt) (fn args => case nt of
+      NPbase => (case args of [p] =>
+        choice (ptree_Pattern NPtuple p) (fn _ =>
+        choice (fmap (fn cn => Ast.Pcon (Some cn) []) (ptree_ConstructorName p)) (fn _ =>
+        choice (fmap (fn v => Ast.Pvar v) (ptree_V p)) (fn _ =>
+        choice (bind (token p) (fn t => case t of
+            IntT i => Some (Ast.Plit (Ast.Intlit i))
+          | StringT s => Some (Ast.Plit (Ast.Strlit s))
+          | CharT c => Some (Ast.Plit (Ast.Char c)) | _ => None))
+          (fn _ => guard (tokcheck p UnderbarT) (fn _ => Some Ast.Pany)))))
+      | [lb,rb] => if tokcheckl args [LbrackT,RbrackT] then Some (Ast.Pcon (Some (Ast.Short "[]")) [])
+          else guard (tokcheck lb OpT) (fn _ => bind (ptree_OpID rb) etoPat)
+      | [lb,ps,rb] => guard (tokcheckl [lb,rb] [LbrackT,RbrackT]) (fn _ =>
+          fmap (List.foldr (fn p => fn a => Ast.Pcon (Some (Ast.Short "::")) [p,a])
+            (Ast.Pcon (Some (Ast.Short "[]")) [])) (ptree_Plist ps))
+      | _ => None)
+    | NPConApp => (case args of [c] => fmap (fn cn => Ast.Pcon (Some cn) []) (ptree_ConstructorName c)
+      | [c,b] => bind (ptree_Pattern NPConApp c) (fn p => fmap (papply p) (ptree_Pattern NPbase b))
+      | _ => None)
+    | NPapp => (case args of [b] => ptree_Pattern NPbase b
+      | [c,b] => bind (ptree_Pattern NPConApp c) (fn p =>
+          fmap (fn q => maybe_handleRef (papply p q)) (ptree_Pattern NPbase b)) | _ => None)
+    | NPcons => (case args of [p] => ptree_Pattern NPapp p
+      | [p,c,q] => guard (tokcheck c (SymbolT "::")) (fn _ => bind (ptree_Pattern NPapp p)
+          (fn a => fmap (fn b => Ast.Pcon (Some (Ast.Short "::")) [a,b]) (ptree_Pattern NPcons q)))
+      | _ => None)
+    | NPas => (case args of [p] => ptree_Pattern NPcons p
+      | [v,a,p] => guard (tokcheck a AsT) (fn _ => bind (ptree_Pattern NPcons p)
+          (fn q => fmap (fn nm => Ast.Pas q nm) (ptree_V v))) | _ => None)
+    | NPattern => (case args of [p] => ptree_Pattern NPas p
+      | [p,c,t] => guard (tokcheck c ColonT) (fn _ => bind (ptree_Pattern NPas p)
+          (fn q => fmap (fn ty => Ast.Ptannot q ty) (ptree_Type NType t))) | _ => None)
+    | NPtuple => (case args of [lp,rp] => guard (tokcheckl args [LparT,RparT])
+          (fn _ => Some (Ast.Pcon None []))
+      | [lp,ps,rp] => guard (tokcheckl [lp,rp] [LparT,RparT]) (fn _ =>
+          bind (ptree_Plist ps) (fn qs => case qs of [] => None | [q] => Some q
+            | _ => Some (Ast.Pcon None qs))) | _ => None)
+    | _ => None)
+  and ptree_Plist pt = bind (node NPatternList pt) (fn args => case args of
+      [p] => fmap (fn q => [q]) (ptree_Pattern NPattern p)
+    | [p,c,ps] => guard (tokcheck c CommaT) (fn _ => bind (ptree_Pattern NPattern p)
+        (fn q => fmap (fn qs => q::qs) (ptree_Plist ps))) | _ => None);
+  fun ptree_PbaseList1 pt = bind (node NPbaseList1 pt) (fn args => case args of
+      [p] => fmap (fn q => [q]) (ptree_Pattern NPbase p)
+    | [p,ps] => bind (ptree_Pattern NPbase p) (fn q =>
+        fmap (fn qs => q::qs) (ptree_PbaseList1 ps)) | _ => None);
+  fun dePat p b = case p of Ast.Pvar v => (v,b)
+    | _ => ("",Ast.Mat (Ast.Ident (Ast.Short "")) [(p,b)]);
+  fun mkFun p b = let val (v,e) = dePat p b in Ast.Fun v e end;
+end;

@@ -1,0 +1,17 @@
+val _ = List.app (fn (name,check) => ParserTests.check ("cake-helper/" ^ name) (check ()))
+  cakehelper_golden;
+
+val _ = ParserTests.check "cake-helper/ref application keeps argument location"
+  (let val l = Ast.Locs (Ast.Posn 1 2) (Ast.Posn 1 3);
+       val arg = Ast.Lannot (Ast.Lit (Ast.Intlit 1)) l;
+   in CakeExpressionSupport.mkAst_App (Ast.Con (Some (Ast.Short "Ref")) []) arg =
+      Ast.App Ast.Opref [arg]
+   end);
+val _ = ParserTests.check "cake-helper/outer annotation wins"
+  (let val inner = Ast.Locs (Ast.Posn 1 2) (Ast.Posn 1 3);
+       val outer = Ast.Locs (Ast.Posn 0 0) (Ast.Posn 3 0);
+       val e = Ast.Lit (Ast.Intlit 1);
+   in CakeExpressionSupport.strip_loc_expr (Ast.Lannot (Ast.Lannot e inner) outer) =
+      (e,Some outer)
+   end);
+val _ = print "CAKE_EXPRESSION_SUPPORT_TESTS_OK\n";

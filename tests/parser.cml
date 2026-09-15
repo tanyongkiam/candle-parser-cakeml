@@ -1,0 +1,29 @@
+structure CandleParserTests = struct
+  open CandleDeclarations;
+  fun has_pragma input = List.exists (fn (tk,_) => case tk of
+      CandleTokens.PragmaT _ => True | _ => False) (CandleLexer.lex input);
+  val in_scope_decls = List.filter (fn (_,_,s,_) => not (has_pragma s)) decl_golden;
+  val in_scope_public = List.filter (fn (_,s,_) => not (has_pragma s)) parser_golden;
+  val _ = ParserTests.check "golden/scope-counts"
+    (List.length in_scope_decls = 50 andalso List.length in_scope_public = 60);
+  val _ = List.app (fn (nt,conv,input,expected) =>
+    ParserTests.check (conv ^ "/" ^ input)
+      (ConversionTests.run nt (if conv = "ptree_Start" then ptree_Start else ptree_Definition) input = expected)) in_scope_decls;
+  val _ = List.app (fn (name,input,expected) =>
+    ParserTests.check ("public/" ^ name) (CandleParser.parse input = expected)) in_scope_public;
+  val hand_identity = Inr [Ast.Dlet (Ast.Locs (Ast.Posn 0 0) (Ast.Posn 0 11))
+    (Ast.Pvar "id") (Ast.Fun "x" (Ast.Ident (Ast.Short "x")))];
+  val _ = ParserTests.check "hand/public-identity"
+    (CandleParser.parse "let id x = x;;" = hand_identity);
+  val _ = ParserTests.check "hand/public-empty" (CandleParser.parse "" = Inr []);
+  val _ = ParserTests.check "hand/public-pragma-excluded"
+    (CandleParser.parse "(*CML val x=1; *)" =
+      (* Preserve the reference lexer's pragma span, not the physical end column. *)
+      Inl (Ast.Locs (Ast.Posn 0 0) (Ast.Posn 0 12),pragma_error));
+  val saved = CandleParser.parse "let x = y;;";
+  val _ = CandleParser.parse "let = ;;";
+  val _ = CandleParser.parse "";
+  val _ = ParserTests.check "hand/public-repeat" (saved = CandleParser.parse "let x = y;;");
+  val _ = print ("CANDLE_PUBLIC_GOLDENS_OK declarations=" ^ Int.toString (List.length in_scope_decls) ^
+    " public=" ^ Int.toString (List.length in_scope_public) ^ "\n");
+end;

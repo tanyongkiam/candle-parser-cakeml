@@ -1,0 +1,21 @@
+(* Required public constructor. Use the updated Ident-enabled executable;
+   the original supplied binary does not expose this constructor. *)
+val ast_variable_contract : Ast.exp = Ast.Ident (Ast.Short "x");
+val _ = ParserTests.check "Ident/short"
+  (ast_variable_contract = Ast.Ident (Ast.Short "x"));
+val _ = ParserTests.check "Ident/qualified and empty generated identifier"
+  (let val qualified = Ast.Ident (Ast.Long "Outer" (Ast.Long "Inner" (Ast.Short "x")));
+       val empty = Ast.Ident (Ast.Short "");
+   in qualified <> empty andalso
+      qualified = Ast.Ident (Ast.Long "Outer" (Ast.Long "Inner" (Ast.Short "x"))) andalso
+      empty = Ast.Ident (Ast.Short "")
+   end);
+val _ = ParserTests.check "Ident/enclosing expression and declaration"
+  (let val l = Ast.Locs (Ast.Posn 0 0) (Ast.Posn 0 8);
+       val e = Ast.Lannot (Ast.App Ast.Opapp
+         [Ast.Ident (Ast.Short "f"),ast_variable_contract]) l;
+   in Ast.Dlet l (Ast.Pvar "y") e =
+      Ast.Dlet l (Ast.Pvar "y") (Ast.Lannot (Ast.App Ast.Opapp
+        [Ast.Ident (Ast.Short "f"),Ast.Ident (Ast.Short "x")]) l)
+   end);
+val _ = print "AST_IDENT_CONTRACT_OK\n";

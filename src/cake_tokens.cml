@@ -1,0 +1,33 @@
+(* Private CakeML token vocabulary from semantics/tokensScript.sml. *)
+structure CakeTokens = struct
+  datatype path = Mod string path | End;
+  datatype token = WhitespaceT int | NewlineT | LexErrorT
+    | HashT | LparT | RparT | StarT | CommaT | ArrowT | DotsT | ColonT | SealT
+    | SemicolonT | EqualsT | DarrowT | LbrackT | RbrackT | UnderbarT | LbraceT
+    | BarT | RbraceT | AndT | AndalsoT | AsT | CaseT | DatatypeT
+    | ElseT | EndT | EqtypeT | ExceptionT | FnT | FunT | HandleT | IfT
+    | InT | IncludeT | LetT | LocalT | OfT | OpT | OpenT | OrelseT | RaiseT
+    | RecT | SharingT | SigT | SignatureT | StructT | StructureT | ThenT
+    | TypeT | ValT | WhereT | WhileT | WithT | WithtypeT
+    | IntT int | HexintT string | WordT int | RealT string | StringT string
+    | CharT char | TyvarT string | AlphaT string | SymbolT string
+    | LongidT path string | FFIT string | REPLIDT string;
+  local
+  val keywords = [("#",HashT),("(",LparT),(")",RparT),("*",StarT),(",",CommaT),
+    ("->",ArrowT),("...",DotsT),(":",ColonT),(":>",SealT),(";",SemicolonT),
+    ("=",EqualsT),("=>",DarrowT),("[",LbrackT),("]",RbrackT),("_",UnderbarT),
+    ("{",LbraceT),("}",RbraceT),("|",BarT),("and",AndT),("andalso",AndalsoT),
+    ("as",AsT),("case",CaseT),("datatype",DatatypeT),("else",ElseT),("end",EndT),
+    ("eqtype",EqtypeT),("exception",ExceptionT),("fn",FnT),("fun",FunT),
+    ("handle",HandleT),("if",IfT),("in",InT),("include",IncludeT),("let",LetT),
+    ("local",LocalT),("of",OfT),("op",OpT),("open",OpenT),("orelse",OrelseT),
+    ("raise",RaiseT),("rec",RecT),("sharing",SharingT),("sig",SigT),
+    ("signature",SignatureT),("struct",StructT),("structure",StructureT),
+    ("then",ThenT),("type",TypeT),("val",ValT),("where",WhereT),("with",WithT),
+    ("withtype",WithtypeT)];
+  in
+  fun get_token s = case List.find (fn (name,_) => s = name) keywords of Some (_,t) => t
+    | None => case String.explode s of [] => LexErrorT
+      | c::_ => if c = #"'" then TyvarT s else if Char.isAlpha c then AlphaT s else SymbolT s;
+  end;
+end;

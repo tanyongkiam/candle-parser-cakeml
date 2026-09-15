@@ -1,0 +1,45 @@
+(* Non-variable expression/pattern lowering from cmlPtreeConversionScript.sml. *)
+structure CakeExpressionSupport = struct
+  open CakeConversion;
+  fun isSymbolicConstructor s = Some (s = "::");
+  fun isConstructor s = Some (s = "::" orelse
+    (String.size s > 0 andalso Char.isAlpha (String.sub s 0) andalso
+     Char.isUpper (String.sub s 0)));
+  fun papply pat arg = case pat of Ast.Pcon cn args => Ast.Pcon cn (args @ [arg])
+    | _ => pat;
+  fun maybe_handleRef pat = case pat of Ast.Pcon (Some (Ast.Short "Ref")) [p] => Ast.Pref p
+    | _ => pat;
+  fun eseq_encode es = case es of [] => None | [e] => Some e
+    | e::rest => fmap (fn body => Ast.Let None e body) (eseq_encode rest);
+  fun dest_conk e k fallback = case e of Ast.Con cn args => k cn args | _ => fallback;
+  fun destFFIop opn = case opn of Ast.Ffi s => Some s | _ => None;
+  fun strip_loc_expr e = case e of Ast.Lannot inner l =>
+      let val (base,_) = strip_loc_expr inner in (base,Some l) end
+    | _ => (e,None);
+  fun merge_locsopt a b = case (a,b) of (Some l1,Some l2) =>
+      Some (CandleSupport.merge_locs l1 l2) | _ => None;
+  fun optLannot l e = case l of None => e | Some loc => Ast.Lannot e loc;
+  fun mkAst_App a1 a2 =
+    let val (a10,loc1) = strip_loc_expr a1 in
+      dest_conk a10 (fn cn => fn args =>
+        if cn = Some (Ast.Short "Ref") andalso args = [] then Ast.App Ast.Opref [a2]
+        else let val (a20,loc2) = strip_loc_expr a2 in
+          optLannot (merge_locsopt loc1 loc2) (Ast.Con cn (args @ [a20])) end)
+        (case a10 of Ast.App opn args =>
+           (case destFFIop opn of None => Ast.App Ast.Opapp [a1,a2]
+            | Some _ => Ast.App opn (args @ [a2]))
+         | _ => Ast.App Ast.Opapp [a1,a2])
+    end;
+  fun ptree_Eliteral pt = bind (node NEliteral pt) (fn xs => case xs of
+      [p] => bind (token p) (fn t => case t of
+          IntT i => Some (Ast.Lit (Ast.Intlit i))
+        | CharT c => Some (Ast.Lit (Ast.Char c))
+        | StringT s => Some (Ast.Lit (Ast.Strlit s))
+        | WordT n => Some (Ast.Lit (Ast.Word64 (Word64.fromInt n)))
+        | FFIT s => Some (Ast.App (Ast.Ffi s) [])
+        | _ => None)
+    | _ => None);
+  fun bind_loc e l = case e of Ast.Lannot _ _ => e | _ => Ast.Lannot e l;
+  fun letFromPat p rhs body = case p of Ast.Pany => Ast.Let None rhs body
+    | Ast.Pvar v => Ast.Let (Some v) rhs body | _ => Ast.Mat rhs [(p,body)];
+end;

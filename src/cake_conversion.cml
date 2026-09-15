@@ -1,0 +1,166 @@
+(* Reachable non-expression conversion from semantics/cmlPtreeConversionScript.sml.
+   This path returns options, not Candle's located-error sum. *)
+structure CakeConversion = struct
+  open CakeTokens;
+  open CakeGrammar;
+  open CandleTree;
+  fun bind m f = case m of None => None | Some x => f x;
+  fun fmap f m = bind m (fn x => Some (f x));
+  fun choice m other = case m of None => other () | Some x => Some x;
+  fun guard b f = if b then f () else None;
+  fun node n pt = case pt of Nd (nt,_) xs => if nt = Inl n then Some xs else None
+    | _ => None;
+  fun token pt = case pt of Lf (t,_) => Some t | _ => None;
+  fun alpha pt = bind (token pt) (fn t => case t of AlphaT s => Some s | _ => None);
+  fun symbol pt = bind (token pt) (fn t => case t of SymbolT s => Some s | _ => None);
+  fun longid pt = bind (token pt) (fn t => case t of LongidT p s => Some (p,s) | _ => None);
+  fun destTyvarPT pt = case pt of Lf (TyvarT s,_) => Some s | _ => None;
+  fun tokcheck pt t = token pt = Some t;
+  fun tokcheckl pts ts = case (pts,ts) of ([],[]) => True
+    | (p::ps,t::rest) => tokcheck p t andalso tokcheckl ps rest | _ => False;
+  fun ptree_UQTyop pt = bind (node NUQTyOp pt) (fn xs => case xs of
+      [p] => choice (symbol p) (fn _ => alpha p) | _ => None);
+  fun ptree_TyvarN pt = bind (node NTyvarN pt) (fn xs => case xs of
+      [p] => destTyvarPT p | _ => None);
+  fun long_short p s = case p of End => Ast.Short s
+    | Mod x rest => Ast.Long x (long_short rest s);
+  fun ptree_Tyop pt = bind (node NTyOp pt) (fn xs => case xs of [p] =>
+    choice (fmap (fn (path,s) => long_short path s) (longid p))
+      (fn _ => fmap (fn s => Ast.Short s) (ptree_UQTyop p)) | _ => None);
+  fun ptree_linfix nt opn elem pt = bind (node nt pt) (fn xs => case xs of
+      [p] => fmap (fn e => [e]) (elem p)
+    | [front,optr,last] => guard (tokcheck optr opn) (fn _ =>
+        bind (ptree_linfix nt opn elem front) (fn es =>
+        fmap (fn e => es @ [e]) (elem last)))
+    | _ => None);
+  fun tuplify tys = case tys of [] => None | [ty] => Some ty | _ => Some (Ast.Attup tys);
+  fun ptree_Type nm pt = bind (node nm pt) (fn xs =>
+    if nm = NType then (case xs of
+        [dt] => bind (ptree_PType dt) tuplify
+      | [dt,arrow,rt] => guard (tokcheck arrow ArrowT) (fn _ =>
+          bind (ptree_PType dt) (fn tys => bind (tuplify tys) (fn ty =>
+          fmap (fn rhs => Ast.Atfun ty rhs) (ptree_Type NType rt))))
+      | _ => None)
+    else if nm = NDType then (case xs of
+        [p] => ptree_Type NTbase p
+      | [dt,opn] => bind (ptree_Type NDType dt) (fn ty =>
+          fmap (fn name => Ast.Atapp [ty] name) (ptree_Tyop opn))
+      | _ => None)
+    else if nm = NTbase then (case xs of
+        [p] => choice (fmap (fn s => Ast.Atvar s) (destTyvarPT p))
+          (fn _ => fmap (fn name => Ast.Atapp [] name) (ptree_Tyop p))
+      | [lp,t,rp] => guard (tokcheck lp LparT andalso tokcheck rp RparT)
+          (fn _ => ptree_Type NType t)
+      | [lp,tl,rp,opn] => guard (tokcheck lp LparT andalso tokcheck rp RparT)
+          (fn _ => bind (ptree_Typelist2 tl) (fn tys =>
+          fmap (fn name => Ast.Atapp tys name) (ptree_Tyop opn)))
+      | _ => None)
+    else None)
+  and ptree_Typelist2 pt = bind (node NTypeList2 pt) (fn xs => case xs of
+      [dt,comma,tl] => guard (tokcheck comma CommaT) (fn _ =>
+        bind (ptree_Type NType dt) (fn ty => fmap (fn tys => ty::tys) (ptree_TypeList1 tl)))
+    | _ => None)
+  and ptree_TypeList1 pt = bind (node NTypeList1 pt) (fn xs => case xs of
+      [dt] => fmap (fn ty => [ty]) (ptree_Type NType dt)
+    | [dt,comma,tl] => guard (tokcheck comma CommaT) (fn _ =>
+        bind (ptree_Type NType dt) (fn ty => fmap (fn tys => ty::tys) (ptree_TypeList1 tl)))
+    | _ => None)
+  and ptree_PType pt = bind (node NPType pt) (fn xs => case xs of
+      [dt] => fmap (fn ty => [ty]) (ptree_Type NDType dt)
+    | [dt,star,tl] => guard (tokcheck star StarT) (fn _ =>
+        bind (ptree_Type NDType dt) (fn ty => fmap (fn tys => ty::tys) (ptree_PType tl)))
+    | _ => None);
+  fun ptree_TypeName pt = bind (node NTypeName pt) (fn xs => case xs of
+      [opn] => fmap (fn name => ([],name)) (ptree_UQTyop opn)
+    | [sym,opn] => bind (destTyvarPT sym) (fn v =>
+        fmap (fn name => ([v],name)) (ptree_UQTyop opn))
+    | [lp,vs,rp,opn] => guard (tokcheck lp LparT andalso tokcheck rp RparT) (fn _ =>
+        bind (ptree_linfix NTyVarList CommaT ptree_TyvarN vs) (fn vars =>
+        fmap (fn name => (vars,name)) (ptree_UQTyop opn)))
+    | _ => None);
+  fun ptree_UQConstructorName pt = bind (node NUQConstructorName pt)
+    (fn xs => case xs of [p] => alpha p | _ => None);
+  fun ptree_ConstructorName pt = bind (node NConstructorName pt) (fn xs => case xs of
+      [p] => choice (fmap (fn s => Ast.Short s) (ptree_UQConstructorName p))
+        (fn _ => fmap (fn (path,s) => long_short path s) (longid p))
+    | _ => None);
+  fun detuplify ty = case ty of Ast.Attup xs => xs | _ => [ty];
+  fun ptree_PTbase pt = bind (node NPTbase pt) (fn xs => case xs of
+      [p] => choice (fmap (fn s => Ast.Atvar s) (destTyvarPT p))
+        (fn _ => fmap (fn name => Ast.Atapp [] name) (ptree_Tyop p))
+    | [lp,t,rp] => guard (tokcheck lp LparT andalso tokcheck rp RparT)
+        (fn _ => ptree_Type NType t)
+    | _ => None);
+  fun ptree_TbaseList pt = bind (node NTbaseList pt) (fn xs => case xs of
+      [] => Some []
+    | [p,rest] => bind (ptree_PTbase p) (fn ty =>
+        fmap (fn tys => ty::tys) (ptree_TbaseList rest))
+    | _ => None);
+  fun ptree_Dconstructor pt = bind (node NDconstructor pt) (fn xs => case xs of
+      [name,args] => bind (ptree_UQConstructorName name) (fn n =>
+        fmap (fn tys => (n,tys)) (ptree_TbaseList args))
+    | _ => None);
+  fun ptree_DtypeDecl pt = bind (node NDtypeDecl pt) (fn xs => case xs of
+      [name,eq,ctors] => guard (tokcheck eq EqualsT) (fn _ =>
+        bind (ptree_TypeName name) (fn (vs,n) =>
+        fmap (fn cs => (vs,n,cs)) (ptree_linfix NDtypeCons BarT ptree_Dconstructor ctors)))
+    | _ => None);
+  fun ptree_TypeDec pt = bind (node NTypeDec pt) (fn xs => case xs of
+      [tk,p] => guard (tokcheck tk DatatypeT)
+        (fn _ => ptree_linfix NDtypeDecls AndT ptree_DtypeDecl p)
+    | _ => None);
+  fun ptree_TypeAbbrevDec pt = bind (node NTypeAbbrevDec pt) (fn xs => case xs of
+      [tk,name,eq,t] => guard (tokcheck tk TypeT andalso tokcheck eq EqualsT) (fn _ =>
+        bind (ptree_TypeName name) (fn (vs,n) =>
+        fmap (fn ty => Ast.Dtabbrev (loc pt) vs n ty) (ptree_Type NType t)))
+    | _ => None);
+  fun singleSymP p xs = case xs of [t] => bind (symbol t) (fn s =>
+      if p s then Some (Ast.Short s) else None) | _ => None;
+  fun ptree_Op pt = case pt of Lf _ => None | Nd (nt,_) xs =>
+    if nt = Inl NMultOps then
+      if tokcheckl xs [StarT] then Some (Ast.Short "*")
+      else if tokcheckl xs [AlphaT "mod"] then Some (Ast.Short "mod")
+      else if tokcheckl xs [AlphaT "div"] then Some (Ast.Short "div")
+      else singleSymP validMultSym xs
+    else if nt = Inl NAddOps then singleSymP validAddSym xs
+    else if nt = Inl NListOps then singleSymP validListSym xs
+    else if nt = Inl NRelOps then choice (singleSymP validRelSym xs)
+      (fn _ => if tokcheckl xs [EqualsT] then Some (Ast.Short "=") else None)
+    else if nt = Inl NCompOps then
+      if tokcheckl xs [SymbolT ":="] then Some (Ast.Short ":=")
+      else if tokcheckl xs [AlphaT "o"] then Some (Ast.Short "o") else None
+    else None;
+  fun ptree_V pt = bind (node NV pt) (fn xs => case xs of [p] =>
+      choice (alpha p) (fn _ => symbol p) | _ => None);
+  fun ptree_FQV pt = bind (node NFQV pt) (fn xs => case xs of [p] =>
+      choice (fmap (fn s => Ast.Short s) (ptree_V p))
+        (fn _ => fmap (fn (path,s) => long_short path s) (longid p)) | _ => None);
+  fun ptree_StructName pt = bind (node NStructName pt)
+    (fn xs => case xs of [p] => alpha p | _ => None);
+  fun path_to_mods p = case p of End => [] | Mod s rest => s::path_to_mods rest;
+  fun ptree_ModPath pt = bind (node NModPath pt) (fn xs => case xs of [p] =>
+      choice (fmap (fn s => [s]) (ptree_StructName p))
+        (fn _ => fmap (fn (path,s) => path_to_mods path @ [s]) (longid p)) | _ => None);
+  fun ptree_OptTypEqn pt = bind (node NOptTypEqn pt) (fn xs => case xs of
+      [] => Some None
+    | [eq,t] => guard (tokcheck eq EqualsT) (fn _ =>
+        fmap (fn ty => Some ty) (ptree_Type NType t))
+    | _ => None);
+  fun ptree_SpecLine pt = bind (node NSpecLine pt) (fn xs => case xs of
+      [td] => fmap (fn _ => ()) (ptree_TypeDec td)
+    | [tk,dc] => guard (tokcheck tk ExceptionT)
+        (fn _ => fmap (fn _ => ()) (ptree_Dconstructor dc))
+    | [tk,name,eq] => guard (tokcheck tk TypeT) (fn _ =>
+        bind (ptree_TypeName name) (fn _ => fmap (fn _ => ()) (ptree_OptTypEqn eq)))
+    | [tk,v,col,t] => guard (tokcheckl [tk,col] [ValT,ColonT]) (fn _ =>
+        bind (ptree_V v) (fn _ => fmap (fn _ => ()) (ptree_Type NType t)))
+    | _ => None);
+  fun ptree_SpeclineList pt = bind (node NSpecLineList pt) (fn xs => case xs of
+      [] => Some ()
+    | [p,rest] => if tokcheck p SemicolonT then ptree_SpeclineList rest
+        else bind (ptree_SpecLine p) (fn _ => ptree_SpeclineList rest)
+    | _ => None);
+  fun ptree_SignatureValue pt = bind (node NSignatureValue pt) (fn xs => case xs of
+      [sg,ss,en] => guard (tokcheckl [sg,en] [SigT,EndT]) (fn _ => ptree_SpeclineList ss)
+    | _ => None);
+end;

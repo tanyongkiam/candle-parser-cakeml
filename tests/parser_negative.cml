@@ -1,0 +1,5 @@
+(* Intentionally incorrect AST: this separate invocation MUST fail. *)
+val _ = ParserTests.check "negative/changed-identifier"
+  (CandleParser.parse "let x = y;;" = Inr
+    [Ast.Dlet (Ast.Locs (Ast.Posn 0 0) (Ast.Posn 0 8))
+      (Ast.Pvar "x") (Ast.Ident (Ast.Short "WRONG"))]);

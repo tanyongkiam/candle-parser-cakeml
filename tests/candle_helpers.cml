@@ -1,0 +1,3 @@
+val _ = ParserTests.check "candle-helper/count" (List.length candlehelper_golden = 31);
+val _ = List.app (fn (name,test) => ParserTests.check ("candle-helper/" ^ name) (test ())) candlehelper_golden;
+val _ = print "CANDLE_HELPER_GOLDENS_OK\n";

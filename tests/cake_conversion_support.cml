@@ -1,0 +1,67 @@
+(* Test-only tagged values keep heterogeneous reference results in one fixture.
+   Successful payloads use the runtime's existing Ast types directly. *)
+structure CakeConversionTests = struct
+  type dtype = string list * string * (string * Ast.ast_t list) list;
+  datatype value = Name string | Id ((string,string) Ast.id) | Typ Ast.ast_t
+    | Types (Ast.ast_t list) | TypeName (string list * string)
+    | Ctor (string * Ast.ast_t list) | Dtype dtype | Datatype (dtype list)
+    | Dec Ast.dec | Path (string list) | Unit unit | OptType (Ast.ast_t option) | Exp Ast.exp;
+  fun convert name nt pt =
+    if name = "ptree_Eliteral" then CakeConversion.fmap (fn x => Exp x)
+      (CakeExpressionSupport.ptree_Eliteral pt)
+    else if name = "ptree_UQTyop" then CakeConversion.fmap (fn x => Name x)
+      (CakeConversion.ptree_UQTyop pt)
+    else if name = "ptree_TyvarN" then CakeConversion.fmap (fn x => Name x)
+      (CakeConversion.ptree_TyvarN pt)
+    else if name = "ptree_Tyop" then CakeConversion.fmap (fn x => Id x)
+      (CakeConversion.ptree_Tyop pt)
+    else if name = "ptree_Type" then CakeConversion.fmap (fn x => Typ x)
+      (CakeConversion.ptree_Type nt pt)
+    else if name = "ptree_Typelist2" then CakeConversion.fmap (fn x => Types x)
+      (CakeConversion.ptree_Typelist2 pt)
+    else if name = "ptree_TypeList1" then CakeConversion.fmap (fn x => Types x)
+      (CakeConversion.ptree_TypeList1 pt)
+    else if name = "ptree_PType" then CakeConversion.fmap (fn x => Types x)
+      (CakeConversion.ptree_PType pt)
+    else if name = "ptree_TypeName" then CakeConversion.fmap (fn x => TypeName x)
+      (CakeConversion.ptree_TypeName pt)
+    else if name = "ptree_UQConstructorName" then CakeConversion.fmap (fn x => Name x)
+      (CakeConversion.ptree_UQConstructorName pt)
+    else if name = "ptree_ConstructorName" then CakeConversion.fmap (fn x => Id x)
+      (CakeConversion.ptree_ConstructorName pt)
+    else if name = "ptree_PTbase" then CakeConversion.fmap (fn x => Typ x)
+      (CakeConversion.ptree_PTbase pt)
+    else if name = "ptree_TbaseList" then CakeConversion.fmap (fn x => Types x)
+      (CakeConversion.ptree_TbaseList pt)
+    else if name = "ptree_Dconstructor" then CakeConversion.fmap (fn x => Ctor x)
+      (CakeConversion.ptree_Dconstructor pt)
+    else if name = "ptree_DtypeDecl" then CakeConversion.fmap (fn x => Dtype x)
+      (CakeConversion.ptree_DtypeDecl pt)
+    else if name = "ptree_TypeDec" then CakeConversion.fmap (fn x => Datatype x)
+      (CakeConversion.ptree_TypeDec pt)
+    else if name = "ptree_TypeAbbrevDec" then CakeConversion.fmap (fn x => Dec x)
+      (CakeConversion.ptree_TypeAbbrevDec pt)
+    else if name = "ptree_Op" then CakeConversion.fmap (fn x => Id x)
+      (CakeConversion.ptree_Op pt)
+    else if name = "ptree_V" then CakeConversion.fmap (fn x => Name x)
+      (CakeConversion.ptree_V pt)
+    else if name = "ptree_FQV" then CakeConversion.fmap (fn x => Id x)
+      (CakeConversion.ptree_FQV pt)
+    else if name = "ptree_StructName" then CakeConversion.fmap (fn x => Name x)
+      (CakeConversion.ptree_StructName pt)
+    else if name = "ptree_ModPath" then CakeConversion.fmap (fn x => Path x)
+      (CakeConversion.ptree_ModPath pt)
+    else if name = "ptree_OptTypEqn" then CakeConversion.fmap (fn x => OptType x)
+      (CakeConversion.ptree_OptTypEqn pt)
+    else if name = "ptree_SpecLine" then CakeConversion.fmap (fn x => Unit x)
+      (CakeConversion.ptree_SpecLine pt)
+    else if name = "ptree_SpeclineList" then CakeConversion.fmap (fn x => Unit x)
+      (CakeConversion.ptree_SpeclineList pt)
+    else if name = "ptree_SignatureValue" then CakeConversion.fmap (fn x => Unit x)
+      (CakeConversion.ptree_SignatureValue pt)
+    else raise Fail ("Unknown CakeML converter: " ^ name);
+  fun run nt name input = case CakeGrammar.parse_nt nt (CakeLexer.lex input) of
+      CandlePeg.Result (CandlePeg.Success _ [pt] _) => convert name nt pt
+    | CandlePeg.Result (CandlePeg.Failure _ _) => None
+    | _ => raise Fail "Unexpected CakeML PEG result shape";
+end;

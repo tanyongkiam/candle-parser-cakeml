@@ -1,0 +1,5 @@
+(* Export names needed by the parser; these build data, never execute FFI. *)
+val _ = ParserTests.check "Ast Ffi export"
+  (Ast.App (Ast.Ffi "parser_test") [] = Ast.App (Ast.Ffi "parser_test") []);
+val _ = ParserTests.check "Ast Word64 export"
+  (Ast.Lit (Ast.Word64 (Word64.fromInt 1)) = Ast.Lit (Ast.Word64 0w1));

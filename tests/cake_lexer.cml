@@ -1,0 +1,12 @@
+val _ = List.app (fn (name,input,expected) =>
+  ParserTests.check name (CakeLexer.lex input = expected)) cakelex_golden;
+(* Hand checks: scanning retains the complete tail even without a semicolon. *)
+val _ = ParserTests.check "hand/cake-no-final-semicolon"
+  (List.map (fn (t,_) => t) (CakeLexer.lex "val x=1") =
+    [CakeTokens.ValT,CakeTokens.AlphaT "x",CakeTokens.EqualsT,CakeTokens.IntT 1]);
+val _ = ParserTests.check "hand/cake-retains-incomplete-tail"
+  (List.length (CakeLexer.lex "val x=1; val y=2") = 9);
+val _ = ParserTests.check "hand/cake-qualified-token"
+  (List.map (fn (t,_) => t) (CakeLexer.lex "Foo.Bar.x") =
+    [CakeTokens.LongidT (CakeTokens.Mod "Foo" (CakeTokens.Mod "Bar" CakeTokens.End)) "x"]);
+val _ = print "CAKE_LEXER_TESTS_OK\n";

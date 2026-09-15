@@ -1,0 +1,3 @@
+(* Deliberately wrong expected result: the outer runner must exit nonzero. *)
+val _ = ParserTests.check "intentional wrong lexer expectation"
+  (CandleLexer.lex "let x = 1;;" = []);

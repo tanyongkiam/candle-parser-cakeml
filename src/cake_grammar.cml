@@ -1,0 +1,490 @@
+(* Executable cmlPEG rules, preserving choice order and parse-tree shape.
+   Nonterminals originate in semantics/gramScript.sml. No AST conversion here. *)
+structure CakeGrammar = struct
+  open CakeTokens;
+  open CandleTree;
+  datatype nonterm = NUQTyOp | NTyvarN | NTyOp | NTypeList1 | NTypeList2 | NTbase | NDType | NPType | NType | NTbaseList | NPTbase | NTypeName | NTyVarList | NDconstructor | NDtypeCons | NDtypeDecl | NDtypeDecls | NTypeDec | NTypeAbbrevDec | NUQConstructorName | NConstructorName | NV | NFQV | NOpID | NEliteral | NEbase | NEseq | NEtuple | NElist2 | NElist1 | NEapp | NMultOps | NAddOps | NRelOps | NCompOps | NListOps | NEmult | NEadd | NElistop | NErel | NEcomp | NEbefore | NEtyped | NElogicAND | NElogicOR | NEhandle | NE | NFDecl | NAndFDecls | NLetDec | NLetDecs | NPbase | NPConApp | NPapp | NPcons | NPas | NPattern | NPtuple | NPatternList | NPbaseList1 | NPE | NPEsfx | NPEs | NStructName | NModPath | NSpecLine | NOptTypEqn | NSpecLineList | NSignatureValue | NOptionalSignatureAscription | NDecl | NDecls | NStructure | NTopLevelDecs | NNonETopLevelDecs;
+  type ptree = (token,nonterm) CandleTree.tree;
+  type key = (nonterm,int) sum;
+  type symbol = (token,key,ptree list,string) CandlePeg.symbol;
+  local
+  fun identity x = x;
+  fun append a b = a @ b;
+  fun foldl f acc xs = List.foldl (fn x => fn a => f a x) acc xs;
+  fun sumID x = case x of Inl a => a | Inr b => b;
+  fun mkNT n = Inl n;
+  fun mktokLf t = [Lf t];
+  fun bindNT0 n xs = mkNd (mkNT n) xs;
+  fun bindNT n xs = [bindNT0 n xs];
+  fun mk_linfix tgt acc rest = case rest of
+      optr::t::tl => mk_linfix tgt (mkNd tgt [acc,optr,t]) tl | _ => acc;
+  fun empty v = CandlePeg.Empty v;
+  fun tok p f = CandlePeg.Tok p f;
+  fun seq a b f = CandlePeg.Seq a b f;
+  fun rpt e f = CandlePeg.Rpt e f;
+  fun pnt n = CandlePeg.Nt (mkNT n) identity;
+  fun choicel xs = case xs of [] => CandlePeg.Not (empty []) []
+    | h::t => CandlePeg.Choice h (choicel t) sumID;
+  fun pegf sym f = seq sym (empty []) (fn a => fn b => f a);
+  fun seql xs f = pegf
+    (List.foldr (fn p => fn acc => seq p acc append) (empty []) xs) f;
+  fun try sym = choicel [sym,empty []];
+  fun peg_linfix tgt rptsym opsym =
+    seq rptsym (rpt (seq opsym rptsym append) List.concat)
+      (fn a => fn b => case a of [] => []
+        | h::_ => [mk_linfix tgt (mkNd tgt [h]) b]);
+  fun tokeq t = tok (fn x => x = t) mktokLf;
+  fun tokSymP p = tok (fn t => case t of SymbolT s => p s | _ => False) mktokLf;
+
+  (* gram's predicates take character lists. These native-string versions
+     inspect exactly the same prefix/length; they do not revalidate symbols. *)
+  fun starts c s = String.size s > 0 andalso String.sub s 0 = c;
+  fun validMultSym s = starts #"/" s orelse starts #"*" s orelse
+    starts #"%" s orelse starts #"&" s;
+  fun validAddSym s = starts #"+" s orelse starts #"-" s orelse
+    starts #"^" s orelse (String.size s >= 2 andalso starts #"|" s);
+  fun validRelSym s = starts #"<" s orelse starts #">" s orelse
+    (String.size s >= 2 andalso (starts #"=" s orelse starts #"~" s));
+  fun validListSym s = starts #"@" s orelse
+    (starts #":" s andalso String.size s >= 2 andalso s <> ":=");
+  fun validPrefixSym s = s = "~" orelse starts #"!" s orelse starts #"?" s;
+  fun validModName s = CakeTokens.get_token s = AlphaT s;
+  fun validModPath p = case p of End => True
+    | Mod s tail => validModName s andalso validModPath tail;
+  fun isLongModidT t = case t of LongidT p s => validModPath p andalso validModName s
+    | _ => False;
+  fun isTyvarT t = case t of TyvarT _ => True | _ => False;
+  fun isInt t = case t of IntT _ => True | _ => False;
+  fun isString t = case t of StringT _ => True | _ => False;
+  fun isCharT t = case t of CharT _ => True | _ => False;
+  fun isWordT t = case t of WordT _ => True | _ => False;
+  fun isFFI t = case t of FFIT _ => True | _ => False;
+  fun isLongidT t = case t of LongidT _ _ => True | _ => False;
+  fun isAlphaSym t = case t of AlphaT _ => True | SymbolT _ => True | _ => False;
+  fun isAlphaNonempty t = case t of AlphaT s => s <> "" | _ => False;
+  fun isSymbolNonempty t = case t of SymbolT s => s <> "" | _ => False;
+  fun isLongNonempty t = case t of LongidT _ s => s <> "" | _ => False;
+  fun isQualifiedConstructor t = case t of LongidT _ s =>
+    s <> "" andalso Char.isAlpha (String.sub s 0) andalso Char.isUpper (String.sub s 0)
+    | _ => False;
+
+  val peg_UQConstructorName : symbol =
+    tok (fn t => case t of AlphaT s => s <> "" andalso Char.isUpper (String.sub s 0)
+          | _ => False) (fn t => bindNT NUQConstructorName (mktokLf t));
+  val peg_TypeDec : symbol =
+    seq (tokeq DatatypeT)
+      (peg_linfix (mkNT NDtypeDecls) (pnt NDtypeDecl) (tokeq AndT))
+      (fn a => fn b => bindNT NTypeDec (a @ b));
+  val peg_V : symbol = choicel [
+    tok (fn t => case t of AlphaT s =>
+      not (List.exists (fn x => x = s) ["before","div","mod","o"]) andalso
+      s <> "" andalso not (Char.isUpper (String.sub s 0)) | _ => False)
+      (fn t => bindNT NV (mktokLf t)),
+    pegf (tokSymP validPrefixSym) (bindNT NV)];
+  val peg_longV : symbol = tok (fn t => case t of LongidT _ s =>
+    s <> "" andalso (not (Char.isAlpha (String.sub s 0)) orelse
+                    not (Char.isUpper (String.sub s 0))) | _ => False)
+    (fn t => bindNT NFQV (mktokLf t));
+  fun peg_EbaseParenFn xs = case xs of
+      [lp,es,rp] => [mkNd (mkNT NEbase) [lp,mkNd (mkNT NEseq) [es],rp]]
+    | [lp,e,sep,es,rp] => (case sep of Lf (t,_) =>
+        if t = CommaT then
+          [mkNd (mkNT NEbase) [mkNd (mkNT NEtuple)
+            [lp,mkNd (mkNT NElist2) [e,sep,es],rp]]]
+        else [mkNd (mkNT NEbase) [lp,mkNd (mkNT NEseq) [e,sep,es],rp]]
+      | _ => [])
+    | _ => [];
+  val peg_EbaseParen : symbol =
+    seql [tokeq LparT,pnt NE,choicel [tokeq RparT,
+      seql [tokeq CommaT,pnt NElist1,tokeq RparT] identity,
+      seql [tokeq SemicolonT,pnt NEseq,tokeq RparT] identity]] peg_EbaseParenFn;
+  val peg_StructName : symbol = tok isAlphaNonempty
+    (fn t => bindNT NStructName (mktokLf t));
+  fun ptPapply0 c pbs = case pbs of [] => []
+    | [pb] => bindNT NPapp [c,pb]
+    | pb::rest => ptPapply0 (bindNT0 NPConApp [c,pb]) rest;
+  fun ptPapply xs = case xs of [] => [] | [_] => []
+    | c::rest => ptPapply0 (bindNT0 NPConApp [c]) rest;
+
+  (* Instantiate the rule data once. The lookup preserves the source's
+     finite map while avoiding a linear association-list scan on every Nt. *)
+  val rules : (key * symbol) list =
+[(mkNT NV, peg_V),
+              (mkNT NTyvarN, pegf (tok isTyvarT mktokLf) (bindNT NTyvarN)),
+              (mkNT NFQV, choicel [pegf (pnt NV) (bindNT NFQV), peg_longV]),
+              (mkNT NEapp,
+               seql [pnt NEbase, rpt (pnt NEbase) List.concat]
+                    (fn l =>
+                       case l of
+                         [] => []
+                       | h::t => [foldl (fn a => fn b => mkNd (mkNT NEapp) [a,b])
+                                        (mkNd (mkNT NEapp) [h]) t])),
+              (mkNT NElist1,
+               seql [pnt NE, try (seql [tokeq CommaT, pnt NElist1] identity)]
+                    (bindNT NElist1)),
+              (mkNT NMultOps,
+               pegf (
+                 choicel (
+                   tokSymP validMultSym ::
+                   List.map tokeq [StarT, AlphaT "mod", AlphaT "div"]
+                 )
+               ) (bindNT NMultOps)),
+              (mkNT NAddOps, pegf (tokSymP validAddSym) (bindNT NAddOps)),
+              (mkNT NRelOps,
+               pegf (choicel [tokeq EqualsT, tokSymP validRelSym])
+                    (bindNT NRelOps)),
+              (mkNT NListOps, pegf (tokSymP validListSym) (bindNT NListOps)),
+              (mkNT NCompOps, pegf (choicel [tokeq (SymbolT ":="),
+                                             tokeq (AlphaT "o")])
+                                   (bindNT NCompOps)),
+              (mkNT NOpID,
+               choicel [tok isLongNonempty (fn t => bindNT NOpID (mktokLf t)),
+                        tok isSymbolNonempty (fn t => bindNT NOpID (mktokLf t)),
+                        tok isAlphaNonempty (fn t => bindNT NOpID (mktokLf t)),
+                        pegf (tokeq StarT) (bindNT NOpID),
+                        pegf (tokeq EqualsT) (bindNT NOpID)]),
+              (mkNT NEliteral,
+               choicel [tok isInt (fn t => bindNT NEliteral (mktokLf t)),
+                        tok isString (fn t => bindNT NEliteral (mktokLf t)),
+                        tok isCharT (fn t => bindNT NEliteral (mktokLf t)),
+                        tok isWordT (fn t => bindNT NEliteral (mktokLf t)),
+                        tok isFFI (fn t => bindNT NEliteral (mktokLf t))]),
+              (mkNT NEbase,
+               choicel [pegf (pnt NEliteral) (bindNT NEbase),
+                        seql [tokeq LparT, tokeq RparT] (bindNT NEbase),
+                        peg_EbaseParen,
+                        seql [tokeq LbrackT, try (pnt NElist1), tokeq RbrackT]
+                             (bindNT NEbase),
+                        seql [tokeq LetT, pnt NLetDecs, tokeq InT, pnt NEseq,
+                              tokeq EndT] (bindNT NEbase),
+                        pegf (pnt NFQV) (bindNT NEbase),
+                        pegf (pnt NConstructorName) (bindNT NEbase),
+                        seql [tokeq OpT, pnt NOpID] (bindNT NEbase)]),
+              (mkNT NEseq,
+               seql [pnt NE, try (seql [tokeq SemicolonT, pnt NEseq] identity)]
+                    (bindNT NEseq)),
+              (mkNT NEmult,
+               peg_linfix (mkNT NEmult) (pnt NEapp) (pnt NMultOps)),
+              (mkNT NEadd, peg_linfix (mkNT NEadd) (pnt NEmult) (pnt NAddOps)),
+              (mkNT NElistop,
+               seql [pnt NEadd, try (seql [pnt NListOps, pnt NElistop] identity)]
+                    (bindNT NElistop)),
+              (mkNT NErel, peg_linfix (mkNT NErel) (pnt NElistop) (pnt NRelOps)),
+              (mkNT NEcomp, peg_linfix (mkNT NEcomp) (pnt NErel)
+                                       (pnt NCompOps)),
+              (mkNT NEbefore, peg_linfix (mkNT NEbefore) (pnt NEcomp)
+                                         (tokeq (AlphaT "before"))),
+              (mkNT NEtyped, seql [pnt NEbefore,
+                                   try (seql [tokeq ColonT, pnt NType] identity)]
+                                  (bindNT NEtyped)),
+              (mkNT NElogicAND,
+               peg_linfix (mkNT NElogicAND) (pnt NEtyped)
+                          (tokeq AndalsoT)),
+              (mkNT NElogicOR,
+               peg_linfix (mkNT NElogicOR) (pnt NElogicAND)
+                          (tokeq OrelseT)),
+              (mkNT NEhandle,
+               seql [pnt NElogicOR,
+                     try (seql [tokeq HandleT, pnt NPEs] identity)]
+                    (bindNT NEhandle)
+              ),
+              (mkNT NE,
+               choicel [seql [tokeq RaiseT, pnt NE] (bindNT NE),
+                        pegf (pnt NEhandle) (bindNT NE),
+                        seql [tokeq IfT, pnt NE, tokeq ThenT, pnt NE,
+                              tokeq ElseT, pnt NE]
+                             (bindNT NE),
+                        seql [tokeq FnT, pnt NPattern, tokeq DarrowT, pnt NE]
+                             (bindNT NE),
+                        seql [tokeq CaseT, pnt NE, tokeq OfT, pnt NPEs]
+                             (bindNT NE)]),
+              (mkNT NPEs,
+               seql [pnt NPattern, tokeq DarrowT, pnt NPE] (bindNT NPEs)),
+              (mkNT NPE,
+               choicel [seql [tokeq IfT, pnt NE, tokeq ThenT, pnt NE,
+                              tokeq ElseT, pnt NPE]
+                             (bindNT NPE),
+                        seql [tokeq CaseT, pnt NE, tokeq OfT, pnt NPEs]
+                             (bindNT NPE),
+                        seql [tokeq FnT, pnt NPattern, tokeq DarrowT, pnt NE]
+                             (bindNT NPE),
+                        seql [tokeq RaiseT, pnt NPE] (bindNT NPE),
+                        seql [pnt NElogicOR, pnt NPEsfx] (bindNT NPE)]),
+              (mkNT NPEsfx,
+               choicel [seql [tokeq HandleT, pnt NPEs] (bindNT NPEsfx),
+                        seql [tokeq BarT, pnt NPEs] (bindNT NPEsfx),
+                        pegf (empty []) (bindNT NPEsfx)]),
+              (mkNT NAndFDecls,
+               peg_linfix (mkNT NAndFDecls) (pnt NFDecl) (tokeq AndT)),
+              (mkNT NFDecl,
+               seql [pnt NV, pnt NPbaseList1,
+                     try (seql [tokeq ColonT, pnt NType] identity), tokeq EqualsT, pnt NE]
+                    (bindNT NFDecl)),
+              (mkNT NPbaseList1,
+               seql [pnt NPbase, try (pnt NPbaseList1)]
+                    (bindNT NPbaseList1)),
+              (mkNT NType,
+               seql [pnt NPType, try (seql [tokeq ArrowT, pnt NType] identity)]
+                    (bindNT NType)),
+              (mkNT NDType,
+               seql [pnt NTbase, rpt (pnt NTyOp) List.concat]
+                    (fn subs =>
+                       case subs of
+                           [] => []
+                         | h::t => [foldl (fn a => fn b => mkNd (mkNT NDType) [a, b])
+                                          (mkNd (mkNT NDType) [h]) t])),
+              (mkNT NTbase,
+               choicel [
+                 seql [tokeq LparT, pnt NType, tokeq RparT] (bindNT NTbase),
+                 seql [tokeq LparT, pnt NTypeList2, tokeq RparT, pnt NTyOp]
+                      (bindNT NTbase),
+                 tok isTyvarT (fn t => bindNT NTbase (mktokLf t)),
+                 pegf (pnt NTyOp) (bindNT NTbase)
+               ]),
+              (mkNT NPTbase,
+               choicel [
+                 seql [tokeq LparT, pnt NType, tokeq RparT] (bindNT NPTbase),
+                 tok isTyvarT (fn t => bindNT NPTbase (mktokLf t)),
+                 pegf (pnt NTyOp) (bindNT NPTbase)
+               ]),
+              (mkNT NTypeList2,
+               seql [pnt NType, tokeq CommaT, pnt NTypeList1]
+                    (bindNT NTypeList2)),
+              (mkNT NTypeList1,
+               seql [pnt NType, try (seql [tokeq CommaT, pnt NTypeList1] identity)]
+                    (bindNT NTypeList1)),
+              (mkNT NTbaseList,
+               pegf (try (seql [pnt NPTbase, pnt NTbaseList] identity))
+                    (bindNT NTbaseList)),
+              (mkNT NTyOp,
+               pegf (choicel [pnt NUQTyOp, tok isLongidT mktokLf])
+                    (bindNT NTyOp)),
+              (mkNT NUQTyOp,
+               pegf (tok isAlphaSym mktokLf) (bindNT NUQTyOp)),
+              (mkNT NPType,
+               seql [pnt NDType, try (seql [tokeq StarT, pnt NPType] identity)]
+                    (bindNT NPType)),
+              (mkNT NTypeName,
+               choicel [pegf (pnt NUQTyOp) (bindNT NTypeName),
+                        seql [tokeq LparT, pnt NTyVarList,
+                              tokeq RparT, pnt NUQTyOp] (bindNT NTypeName),
+                        seql [tok isTyvarT mktokLf, pnt NUQTyOp]
+                             (bindNT NTypeName)
+                       ]),
+              (mkNT NTyVarList,
+               peg_linfix (mkNT NTyVarList) (pnt NTyvarN) (tokeq CommaT)),
+              (mkNT NTypeDec, peg_TypeDec),
+              (mkNT NDtypeDecl,
+               seql [pnt NTypeName,
+                     tokeq EqualsT,
+                     peg_linfix (mkNT NDtypeCons) (pnt NDconstructor) (tokeq BarT)]
+                    (bindNT NDtypeDecl)),
+              (mkNT NDconstructor,
+               seql [pnt NUQConstructorName, pnt NTbaseList]
+                    (bindNT NDconstructor)),
+              (mkNT NUQConstructorName, peg_UQConstructorName),
+              (mkNT NConstructorName,
+               choicel [
+                 pegf (pnt NUQConstructorName) (bindNT NConstructorName),
+                 tok isQualifiedConstructor
+                     (fn t => bindNT NConstructorName (mktokLf t))]),
+              (mkNT NPbase,
+               pegf
+                 (choicel [pnt NV, pnt NConstructorName, tok isInt mktokLf,
+                           tok isString mktokLf, tok isCharT mktokLf,
+                           pnt NPtuple, tokeq UnderbarT,
+                           seql [tokeq LbrackT, try (pnt NPatternList),
+                                 tokeq RbrackT] identity,
+                           seql [tokeq OpT, pnt NOpID] identity])
+                 (bindNT NPbase)),
+              (mkNT NPapp,
+               choicel [seql [pnt NConstructorName, rpt (pnt NPbase) List.concat]
+                         (fn pts => if List.length pts = 1 then
+                                   bindNT NPapp (bindNT NPbase pts)
+                                 else
+                                   case pts of
+                                       [] =>  []
+                                     | [c] =>  []
+                                     | _ => ptPapply pts
+                         ),
+                        pegf (pnt NPbase) (bindNT NPapp)
+              ]),
+              (mkNT NPcons,
+               seql [pnt NPapp,
+                     try (seql [tokeq (SymbolT "::"), pnt NPcons] identity)]
+                    (bindNT NPcons)),
+              (mkNT NPas,
+               seql [try (seql [pnt NV, tokeq AsT] identity),
+                     pnt NPcons]
+                    (bindNT NPas)),
+              (mkNT NPattern,
+               seql [pnt NPas, try (seql [tokeq ColonT, pnt NType] identity)]
+                    (bindNT NPattern)),
+              (mkNT NPatternList,
+               seql [pnt NPattern,
+                     try (seql [tokeq CommaT, pnt NPatternList] identity)]
+                    (bindNT NPatternList)),
+              (mkNT NPtuple,
+               choicel [seql [tokeq LparT, tokeq RparT] (bindNT NPtuple),
+                        seql [tokeq LparT, pnt NPatternList, tokeq RparT]
+                             (bindNT NPtuple)]),
+              (mkNT NLetDec,
+               choicel [seql [tokeq ValT, pnt NPattern, tokeq EqualsT, pnt NE]
+                             (bindNT NLetDec),
+                        seql [tokeq FunT, pnt NAndFDecls] (bindNT NLetDec),
+                        seql [tokeq OpenT, pnt NModPath]
+                             (bindNT NLetDec)]),
+              (mkNT NLetDecs,
+               choicel [seql [pnt NLetDec, pnt NLetDecs] (bindNT NLetDecs),
+                        seql [tokeq SemicolonT, pnt NLetDecs] (bindNT NLetDecs),
+                        pegf (empty []) (bindNT NLetDecs)]),
+              (mkNT NDecl,
+               choicel [
+                 seql [tokeq ValT, pnt NPattern, tokeq EqualsT, pnt NE]
+                      (bindNT NDecl),
+                 seql [tokeq FunT, pnt NAndFDecls] (bindNT NDecl),
+                 seql [tokeq ExceptionT, pnt NDconstructor] (bindNT NDecl),
+                 seql [tokeq LocalT, pnt NDecls, tokeq InT, pnt NDecls,
+                       tokeq EndT] (bindNT NDecl),
+                 seql [pnt NTypeDec] (bindNT NDecl),
+                 seql [pnt NTypeAbbrevDec] (bindNT NDecl),
+                 seql [tokeq OpenT, pnt NModPath]
+                      (bindNT NDecl),
+                 seql [pnt NStructure] (bindNT NDecl)]),
+              (mkNT NTypeAbbrevDec,
+               seql [tokeq TypeT, pnt NTypeName, tokeq EqualsT, pnt NType]
+                    (bindNT NTypeAbbrevDec)),
+              (mkNT NDecls,
+               choicel [seql [pnt NDecl, pnt NDecls] (bindNT NDecls),
+                        seql [tokeq SemicolonT, pnt NDecls] (bindNT NDecls),
+                        pegf (empty []) (bindNT NDecls)]),
+              (mkNT NOptTypEqn,
+               choicel [seql [tokeq EqualsT, pnt NType] (bindNT NOptTypEqn),
+                        pegf (empty []) (bindNT NOptTypEqn)]),
+              (mkNT NSpecLine,
+               choicel [seql [tokeq ValT, pnt NV, tokeq ColonT, pnt NType]
+                             (bindNT NSpecLine),
+                        seql [tokeq TypeT, pnt NTypeName, pnt NOptTypEqn]
+                             (bindNT NSpecLine),
+                        seql [tokeq ExceptionT, pnt NDconstructor] (bindNT NSpecLine),
+                        pegf (pnt NTypeDec) (bindNT NSpecLine)]),
+              (mkNT NSpecLineList,
+               choicel [seql [pnt NSpecLine, pnt NSpecLineList]
+                             (bindNT NSpecLineList),
+                        seql [tokeq SemicolonT, pnt NSpecLineList]
+                             (bindNT NSpecLineList),
+                        pegf (empty []) (bindNT NSpecLineList)]),
+              (mkNT NSignatureValue,
+               seql [tokeq SigT, pnt NSpecLineList, tokeq EndT]
+                    (bindNT NSignatureValue)),
+              (mkNT NOptionalSignatureAscription,
+               pegf (try (seql [tokeq SealT, pnt NSignatureValue] identity))
+                    (bindNT NOptionalSignatureAscription)),
+              (mkNT NStructName, peg_StructName),
+              (mkNT NModPath,
+               pegf (choicel [pnt NStructName, tok isLongModidT mktokLf])
+                    (bindNT NModPath)),
+              (mkNT NStructure,
+               seql [tokeq StructureT, pnt NStructName, pnt NOptionalSignatureAscription,
+                     tokeq EqualsT, tokeq StructT, pnt NDecls, tokeq EndT]
+                    (bindNT NStructure)),
+              (mkNT NTopLevelDecs,
+               choicel [
+                 seql [pnt NE, tokeq SemicolonT, pnt NTopLevelDecs]
+                      (bindNT NTopLevelDecs),
+                 seql [pnt NDecl, pnt NNonETopLevelDecs]
+                      (bindNT NTopLevelDecs),
+                 seql [tokeq SemicolonT, pnt NTopLevelDecs]
+                      (bindNT NTopLevelDecs),
+                 pegf (empty []) (bindNT NTopLevelDecs)]),
+              (mkNT NNonETopLevelDecs,
+               choicel [
+                 seql [pnt NDecl, pnt NNonETopLevelDecs]
+                      (bindNT NNonETopLevelDecs),
+                 seql [tokeq SemicolonT, pnt NTopLevelDecs]
+                      (bindNT NNonETopLevelDecs),
+                 pegf (empty []) (bindNT NNonETopLevelDecs)])];
+  val rule_vector = Vector.fromList (List.map (fn (_,r) => r) rules);
+  fun lookup n = case n of
+      Inl NV => Some (Vector.sub rule_vector 0)
+    | Inl NTyvarN => Some (Vector.sub rule_vector 1)
+    | Inl NFQV => Some (Vector.sub rule_vector 2)
+    | Inl NEapp => Some (Vector.sub rule_vector 3)
+    | Inl NElist1 => Some (Vector.sub rule_vector 4)
+    | Inl NMultOps => Some (Vector.sub rule_vector 5)
+    | Inl NAddOps => Some (Vector.sub rule_vector 6)
+    | Inl NRelOps => Some (Vector.sub rule_vector 7)
+    | Inl NListOps => Some (Vector.sub rule_vector 8)
+    | Inl NCompOps => Some (Vector.sub rule_vector 9)
+    | Inl NOpID => Some (Vector.sub rule_vector 10)
+    | Inl NEliteral => Some (Vector.sub rule_vector 11)
+    | Inl NEbase => Some (Vector.sub rule_vector 12)
+    | Inl NEseq => Some (Vector.sub rule_vector 13)
+    | Inl NEmult => Some (Vector.sub rule_vector 14)
+    | Inl NEadd => Some (Vector.sub rule_vector 15)
+    | Inl NElistop => Some (Vector.sub rule_vector 16)
+    | Inl NErel => Some (Vector.sub rule_vector 17)
+    | Inl NEcomp => Some (Vector.sub rule_vector 18)
+    | Inl NEbefore => Some (Vector.sub rule_vector 19)
+    | Inl NEtyped => Some (Vector.sub rule_vector 20)
+    | Inl NElogicAND => Some (Vector.sub rule_vector 21)
+    | Inl NElogicOR => Some (Vector.sub rule_vector 22)
+    | Inl NEhandle => Some (Vector.sub rule_vector 23)
+    | Inl NE => Some (Vector.sub rule_vector 24)
+    | Inl NPEs => Some (Vector.sub rule_vector 25)
+    | Inl NPE => Some (Vector.sub rule_vector 26)
+    | Inl NPEsfx => Some (Vector.sub rule_vector 27)
+    | Inl NAndFDecls => Some (Vector.sub rule_vector 28)
+    | Inl NFDecl => Some (Vector.sub rule_vector 29)
+    | Inl NPbaseList1 => Some (Vector.sub rule_vector 30)
+    | Inl NType => Some (Vector.sub rule_vector 31)
+    | Inl NDType => Some (Vector.sub rule_vector 32)
+    | Inl NTbase => Some (Vector.sub rule_vector 33)
+    | Inl NPTbase => Some (Vector.sub rule_vector 34)
+    | Inl NTypeList2 => Some (Vector.sub rule_vector 35)
+    | Inl NTypeList1 => Some (Vector.sub rule_vector 36)
+    | Inl NTbaseList => Some (Vector.sub rule_vector 37)
+    | Inl NTyOp => Some (Vector.sub rule_vector 38)
+    | Inl NUQTyOp => Some (Vector.sub rule_vector 39)
+    | Inl NPType => Some (Vector.sub rule_vector 40)
+    | Inl NTypeName => Some (Vector.sub rule_vector 41)
+    | Inl NTyVarList => Some (Vector.sub rule_vector 42)
+    | Inl NTypeDec => Some (Vector.sub rule_vector 43)
+    | Inl NDtypeDecl => Some (Vector.sub rule_vector 44)
+    | Inl NDconstructor => Some (Vector.sub rule_vector 45)
+    | Inl NUQConstructorName => Some (Vector.sub rule_vector 46)
+    | Inl NConstructorName => Some (Vector.sub rule_vector 47)
+    | Inl NPbase => Some (Vector.sub rule_vector 48)
+    | Inl NPapp => Some (Vector.sub rule_vector 49)
+    | Inl NPcons => Some (Vector.sub rule_vector 50)
+    | Inl NPas => Some (Vector.sub rule_vector 51)
+    | Inl NPattern => Some (Vector.sub rule_vector 52)
+    | Inl NPatternList => Some (Vector.sub rule_vector 53)
+    | Inl NPtuple => Some (Vector.sub rule_vector 54)
+    | Inl NLetDec => Some (Vector.sub rule_vector 55)
+    | Inl NLetDecs => Some (Vector.sub rule_vector 56)
+    | Inl NDecl => Some (Vector.sub rule_vector 57)
+    | Inl NTypeAbbrevDec => Some (Vector.sub rule_vector 58)
+    | Inl NDecls => Some (Vector.sub rule_vector 59)
+    | Inl NOptTypEqn => Some (Vector.sub rule_vector 60)
+    | Inl NSpecLine => Some (Vector.sub rule_vector 61)
+    | Inl NSpecLineList => Some (Vector.sub rule_vector 62)
+    | Inl NSignatureValue => Some (Vector.sub rule_vector 63)
+    | Inl NOptionalSignatureAscription => Some (Vector.sub rule_vector 64)
+    | Inl NStructName => Some (Vector.sub rule_vector 65)
+    | Inl NModPath => Some (Vector.sub rule_vector 66)
+    | Inl NStructure => Some (Vector.sub rule_vector 67)
+    | Inl NTopLevelDecs => Some (Vector.sub rule_vector 68)
+    | Inl NNonETopLevelDecs => Some (Vector.sub rule_vector 69)
+    | _ => None;
+  val grammar = (lookup,"Didn't expect an EOF","Failed to see expected token",
+    "Failed to see expected token; saw EOF instead","Not combinator failed");
+  in
+  val validMultSym = validMultSym;
+  val validAddSym = validAddSym;
+  val validRelSym = validRelSym;
+  val validListSym = validListSym;
+  fun parse_nt n tokens = CandlePeg.execute grammar (pnt n) tokens;
+  fun parse_tokens tokens = parse_nt NTopLevelDecs tokens;
+  end;
+end;

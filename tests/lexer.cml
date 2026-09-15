@@ -1,0 +1,3 @@
+val _ = List.app (fn (name,input,expected) =>
+  ParserTests.check ("lexer/" ^ name) (CandleLexer.lex input = expected)) lexer_golden;
+val _ = print "LEXER_TESTS_OK\n";

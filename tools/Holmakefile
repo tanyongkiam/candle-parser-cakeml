@@ -1,0 +1,7 @@
+# Optional reference regeneration needs an external CakeML checkout.
+# The fallback preserves the original in-tree parse/tools layout.
+ifdef CAKEML_ROOT
+INCLUDES = $(CAKEML_ROOT)/compiler/parsing/ocaml
+else
+INCLUDES = ../../compiler/parsing/ocaml
+endif

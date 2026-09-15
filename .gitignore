@@ -1,0 +1,16 @@
+tools/.hol/
+tools/*Theory.dat
+tools/*Theory.sml
+tools/*Theory.sig
+tools/__pycache__/
+build/
+# HOL dependency scans can create these anywhere in the tree.
+.hol/
+__pycache__/
+# Executables and one-off combined bundles are built, not versioned.
+/cake-ast-parse*
+/candle-parser.cml
+# Earlier runtime copies retained only in the original development workspace.
+/runtime/cake.S
+/runtime/cake-baseline
+/runtime/config_enc_str-var.txt

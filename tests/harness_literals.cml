@@ -1,0 +1,4 @@
+(* Diagnostic-looking source text is data, not a REPL diagnostic. *)
+val diagnostic_literals = ["ERROR:","Exception raised","Uncaught","TEST_FAILED:",
+  "Compilation interrupted","Unable to read file","Parsing failed","EXCEPTION:","<failure:"];
+val _ = ParserTests.check "harness/literal-count" (List.length diagnostic_literals = 9);

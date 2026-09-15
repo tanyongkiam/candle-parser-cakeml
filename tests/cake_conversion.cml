@@ -1,0 +1,30 @@
+val _ = List.app (fn (nt,name,input,expected) =>
+  ParserTests.check ("cake-conversion/" ^ name ^ "/" ^ input)
+    (CakeConversionTests.run nt name input = expected)) cakeconversion_golden;
+
+(* Hand expectations are independent of the HOL fixture serializer. *)
+val _ = ParserTests.check "cake-conversion/right-associative arrow"
+  (CakeConversionTests.run CakeGrammar.NType "ptree_Type" "'a -> 'b -> 'c" =
+    Some (CakeConversionTests.Typ (Ast.Atfun (Ast.Atvar "'a")
+      (Ast.Atfun (Ast.Atvar "'b") (Ast.Atvar "'c")))));
+val _ = ParserTests.check "cake-conversion/CakeML constructors do not rename"
+  (CakeConversionTests.run CakeGrammar.NUQConstructorName "ptree_UQConstructorName" "Bad_file_name" =
+    Some (CakeConversionTests.Name "Bad_file_name"));
+val _ = ParserTests.check "cake-conversion/constructor tuple remains one argument"
+  (CakeConversionTests.run CakeGrammar.NDconstructor "ptree_Dconstructor" "C ('a * 'b)" =
+    Some (CakeConversionTests.Ctor ("C",[Ast.Attup [Ast.Atvar "'a",Ast.Atvar "'b"]])));
+val _ = ParserTests.check "cake-conversion/empty type equation distinguished from failure"
+  (CakeConversionTests.run CakeGrammar.NOptTypEqn "ptree_OptTypEqn" "" =
+    Some (CakeConversionTests.OptType None));
+val _ = ParserTests.check "cake-conversion/duplicate constructors retained"
+  (CakeConversionTests.run CakeGrammar.NTypeDec "ptree_TypeDec" "datatype t = C | C" =
+    Some (CakeConversionTests.Datatype [([],"t",[("C",[]),("C",[])]) ]));
+val _ = ParserTests.check "cake-conversion/wrong node and wrong token reject"
+  (let val loc = Ast.Locs Ast.Unknownpt Ast.Unknownpt;
+       val leaf = CandleTree.Lf (CakeTokens.AlphaT "x",loc);
+       val wrong = CandleTree.Nd (Inl CakeGrammar.NType,loc) [leaf];
+   in CakeConversion.ptree_V leaf = None andalso CakeConversion.ptree_V wrong = None andalso
+      CakeConversion.ptree_Type CakeGrammar.NType wrong = None andalso
+      CakeConversion.tokcheckl [leaf] [] = False
+   end);
+val _ = print "CAKE_CONVERSION_TESTS_OK\n";

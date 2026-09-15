@@ -1,0 +1,14 @@
+structure ExpressionTests = struct
+  open CandleExpressions;
+  val _ = List.app (fn (nt,conv,input,expected) => ParserTests.check
+    (conv ^ "/" ^ input) (ConversionTests.run nt (ptree_Expr nt) input = expected)) expr_golden;
+  val _ = ParserTests.check "hand/ident"
+    (ConversionTests.run NExpr (ptree_Expr NExpr) "x" = Inr (Ast.Ident (Ast.Short "x")));
+  val _ = ParserTests.check "hand/qualified-ident"
+    (ConversionTests.run NExpr (ptree_Expr NExpr) "Aa.Bb.x" =
+      Inr (Ast.Ident (Ast.Long "Aa" (Ast.Long "Bb" (Ast.Short "x")))));
+  val _ = ParserTests.check "hand/identity-lambda"
+    (ConversionTests.run NExpr (ptree_Expr NExpr) "fun x -> x" =
+      Inr (Ast.Fun "x" (Ast.Ident (Ast.Short "x"))));
+  val _ = print "EXPRESSION_TESTS_OK\n";
+end;

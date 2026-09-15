@@ -1,0 +1,341 @@
+{
+  "startup_seconds": 0.627631057985127,
+  "parser_load_seconds": 2.44263353664428,
+  "benchmark_input_load_seconds": 2.90380866965279,
+  "zero_batch_seconds": 0.002475203014910221,
+  "zero_batch_samples": [
+    0.002669587731361389,
+    0.0024020751006901264,
+    0.002475203014910221
+  ],
+  "samples": 3,
+  "minimum_rounds": 10,
+  "minimum_batch_seconds": 0.15,
+  "results": [
+    {
+      "name": "records/raw",
+      "bytes": 1779,
+      "success": true,
+      "rounds": 40,
+      "batch_seconds": [
+        0.23411557404324412,
+        0.24605464981868863,
+        0.24966141022741795
+      ],
+      "median_batch_seconds": 0.24605464981868863,
+      "estimated_seconds_per_parse": 0.00608948617009446,
+      "resolution_limited": false
+    },
+    {
+      "name": "boot/Candle-only-projection",
+      "bytes": 23683,
+      "success": true,
+      "rounds": 10,
+      "batch_seconds": [
+        1.0539540387690067,
+        1.0650448589585721,
+        1.07426798902452
+      ],
+      "median_batch_seconds": 1.0650448589585721,
+      "estimated_seconds_per_parse": 0.10625696559436619,
+      "resolution_limited": false
+    },
+    {
+      "name": "declarations/8",
+      "bytes": 120,
+      "success": true,
+      "rounds": 160,
+      "batch_seconds": [
+        0.1783247678540647,
+        0.1798148090019822,
+        0.18139017093926668
+      ],
+      "median_batch_seconds": 0.1798148090019822,
+      "estimated_seconds_per_parse": 0.0011083725374192,
+      "resolution_limited": false
+    },
+    {
+      "name": "list/8",
+      "bytes": 27,
+      "success": true,
+      "rounds": 320,
+      "batch_seconds": [
+        0.24867268092930317,
+        0.24861829914152622,
+        0.2485891142860055
+      ],
+      "median_batch_seconds": 0.24861829914152622,
+      "estimated_seconds_per_parse": 0.000769197175395675,
+      "resolution_limited": false
+    },
+    {
+      "name": "application/8",
+      "bytes": 27,
+      "success": true,
+      "rounds": 640,
+      "batch_seconds": [
+        0.16775170108303428,
+        0.1671756780706346,
+        0.1665688781067729
+      ],
+      "median_batch_seconds": 0.1671756780706346,
+      "estimated_seconds_per_parse": 0.00025734449227456937,
+      "resolution_limited": false
+    },
+    {
+      "name": "parentheses/8",
+      "bytes": 27,
+      "success": true,
+      "rounds": 160,
+      "batch_seconds": [
+        0.16844293102622032,
+        0.16488752607256174,
+        0.1708964928984642
+      ],
+      "median_batch_seconds": 0.16844293102622032,
+      "estimated_seconds_per_parse": 0.0010372983000706882,
+      "resolution_limited": false
+    },
+    {
+      "name": "comments/8",
+      "bytes": 50,
+      "success": true,
+      "rounds": 1280,
+      "batch_seconds": [
+        0.20897166430950165,
+        0.20409420505166054,
+        0.2043101298622787
+      ],
+      "median_batch_seconds": 0.2043101298622787,
+      "estimated_seconds_per_parse": 0.00015768353659950662,
+      "resolution_limited": false
+    },
+    {
+      "name": "literal/1024",
+      "bytes": 1036,
+      "success": true,
+      "rounds": 1280,
+      "batch_seconds": [
+        0.2141778520308435,
+        0.21166411601006985,
+        0.19992736028507352
+      ],
+      "median_batch_seconds": 0.21166411601006985,
+      "estimated_seconds_per_parse": 0.00016342883827746846,
+      "resolution_limited": false
+    },
+    {
+      "name": "late-failure/8",
+      "bytes": 121,
+      "success": false,
+      "rounds": 160,
+      "batch_seconds": [
+        0.17555247619748116,
+        0.1690343921072781,
+        0.17308433633297682
+      ],
+      "median_batch_seconds": 0.17308433633297682,
+      "estimated_seconds_per_parse": 0.0010663070832379162,
+      "resolution_limited": false
+    },
+    {
+      "name": "declarations/32",
+      "bytes": 524,
+      "success": true,
+      "rounds": 40,
+      "batch_seconds": [
+        0.1824593711644411,
+        0.18641287367790937,
+        0.18797923903912306
+      ],
+      "median_batch_seconds": 0.18641287367790937,
+      "estimated_seconds_per_parse": 0.004598441766574979,
+      "resolution_limited": false
+    },
+    {
+      "name": "list/32",
+      "bytes": 75,
+      "success": true,
+      "rounds": 80,
+      "batch_seconds": [
+        0.22465507872402668,
+        0.2215130920521915,
+        0.22067858278751373
+      ],
+      "median_batch_seconds": 0.2215130920521915,
+      "estimated_seconds_per_parse": 0.002737973612966016,
+      "resolution_limited": false
+    },
+    {
+      "name": "application/32",
+      "bytes": 75,
+      "success": true,
+      "rounds": 320,
+      "batch_seconds": [
+        0.18510195892304182,
+        0.18152173794806004,
+        0.17585080722346902
+      ],
+      "median_batch_seconds": 0.18152173794806004,
+      "estimated_seconds_per_parse": 0.0005595204216660932,
+      "resolution_limited": false
+    },
+    {
+      "name": "parentheses/32",
+      "bytes": 75,
+      "success": true,
+      "rounds": 40,
+      "batch_seconds": [
+        0.15189817594364285,
+        0.15380384866148233,
+        0.16188315814360976
+      ],
+      "median_batch_seconds": 0.15380384866148233,
+      "estimated_seconds_per_parse": 0.0037832161411643027,
+      "resolution_limited": false
+    },
+    {
+      "name": "comments/32",
+      "bytes": 146,
+      "success": true,
+      "rounds": 1280,
+      "batch_seconds": [
+        0.1984829562716186,
+        0.20329419989138842,
+        0.2180947340093553
+      ],
+      "median_batch_seconds": 0.20329419989138842,
+      "estimated_seconds_per_parse": 0.0001568898413097486,
+      "resolution_limited": false
+    },
+    {
+      "name": "literal/4096",
+      "bytes": 4108,
+      "success": true,
+      "rounds": 1280,
+      "batch_seconds": [
+        0.2774040959775448,
+        0.28497797530144453,
+        0.2768321307376027
+      ],
+      "median_batch_seconds": 0.2774040959775448,
+      "estimated_seconds_per_parse": 0.00021478819762705826,
+      "resolution_limited": false
+    },
+    {
+      "name": "late-failure/32",
+      "bytes": 525,
+      "success": false,
+      "rounds": 40,
+      "batch_seconds": [
+        0.1763000013306737,
+        0.1717428439296782,
+        0.17016477836295962
+      ],
+      "median_batch_seconds": 0.1717428439296782,
+      "estimated_seconds_per_parse": 0.0042316910228692,
+      "resolution_limited": false
+    },
+    {
+      "name": "declarations/128",
+      "bytes": 2212,
+      "success": true,
+      "rounds": 10,
+      "batch_seconds": [
+        0.18878727685660124,
+        0.18839925806969404,
+        0.1853319420479238
+      ],
+      "median_batch_seconds": 0.18839925806969404,
+      "estimated_seconds_per_parse": 0.01859240550547838,
+      "resolution_limited": false
+    },
+    {
+      "name": "list/128",
+      "bytes": 267,
+      "success": true,
+      "rounds": 20,
+      "batch_seconds": [
+        0.2120228298008442,
+        0.21629215590655804,
+        0.25398530904203653
+      ],
+      "median_batch_seconds": 0.21629215590655804,
+      "estimated_seconds_per_parse": 0.01069084764458239,
+      "resolution_limited": false
+    },
+    {
+      "name": "application/128",
+      "bytes": 267,
+      "success": true,
+      "rounds": 80,
+      "batch_seconds": [
+        0.13950470695272088,
+        0.1406392389908433,
+        0.13909973530098796
+      ],
+      "median_batch_seconds": 0.13950470695272088,
+      "estimated_seconds_per_parse": 0.0017128687992226332,
+      "resolution_limited": false
+    },
+    {
+      "name": "parentheses/128",
+      "bytes": 267,
+      "success": true,
+      "rounds": 10,
+      "batch_seconds": [
+        0.16376345325261354,
+        0.15513551188632846,
+        0.17178003396838903
+      ],
+      "median_batch_seconds": 0.16376345325261354,
+      "estimated_seconds_per_parse": 0.016128825023770332,
+      "resolution_limited": false
+    },
+    {
+      "name": "comments/128",
+      "bytes": 530,
+      "success": true,
+      "rounds": 1280,
+      "batch_seconds": [
+        0.20813213614746928,
+        0.21223665215075016,
+        0.2149447430856526
+      ],
+      "median_batch_seconds": 0.21223665215075016,
+      "estimated_seconds_per_parse": 0.00016387613213737496,
+      "resolution_limited": false
+    },
+    {
+      "name": "literal/16384",
+      "bytes": 16396,
+      "success": true,
+      "rounds": 640,
+      "batch_seconds": [
+        0.2658103797584772,
+        0.2594060697592795,
+        0.2659606127999723
+      ],
+      "median_batch_seconds": 0.2658103797584772,
+      "estimated_seconds_per_parse": 0.00041146121366182343,
+      "resolution_limited": false
+    },
+    {
+      "name": "late-failure/128",
+      "bytes": 2213,
+      "success": false,
+      "rounds": 10,
+      "batch_seconds": [
+        0.17986466316506267,
+        0.1856395499780774,
+        0.17320863995701075
+      ],
+      "median_batch_seconds": 0.17986466316506267,
+      "estimated_seconds_per_parse": 0.017738946015015244,
+      "resolution_limited": false
+    }
+  ],
+  "timing": "host wall batch minus measured zero-batch overhead; not native CPU time",
+  "reference_comparison": "none: no comparable source-loaded reference executable",
+  "process_peak_rss_kib": 16794332
+}

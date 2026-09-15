@@ -1,0 +1,113 @@
+(* Embedded CakeML lexer: lexer_fun's executable scanner. The pragma passes
+   all tokens directly to its grammar. Keep the original location/counting quirks.
+   String accumulation is reversed internally and assembled once. *)
+structure CakeLexer = struct
+  open CandleSupport;
+  open CakeTokens;
+  datatype symbol = StringS string | CharS char | NumberS int | WordS int
+    | LongS (string list) string | FFIS string | OtherS string | ErrorS;
+  fun single c = char_in "()[]{},;" c;
+  fun isSymbol c = char_in "`!%&$#+-/:<=>?@\\~^|*" c;
+  fun identChar c = Char.isAlphaNum c orelse c = #"'" orelse c = #"_";
+  fun read_while p cs acc = let val (part,rest) = take_while p cs;
+    in (List.rev acc @ part,rest) end;
+  fun read_char_as_3digits cs = case cs of a::b::c::rest =>
+      if Char.isDigit a andalso Char.isDigit b andalso Char.isDigit c then
+        let val n = from_digits 10 [a,b,c];
+        in if n < 256 then Some (Char.chr n,rest) else None end
+      else None
+    | _ => None;
+  fun read_string_rev cs acc loc = case cs of [] => (ErrorS,loc,[])
+    | c::rest => if c = #"\"" then (StringS (String.implode (List.rev acc)),loc,rest)
+      else if c = #"\n" then (ErrorS,next_line loc,rest)
+      else if c <> #"\\" then read_string_rev rest (c::acc) (next_loc 1 loc)
+      else case rest of [] => (ErrorS,loc,[])
+        | e::es =>
+          let val escaped = case e of #"\\" => Some #"\\" | #"\"" => Some #"\""
+                | #"a" => Some (Char.chr 7) | #"b" => Some (Char.chr 8)
+                | #"t" => Some (Char.chr 9) | #"n" => Some (Char.chr 10)
+                | #"v" => Some (Char.chr 11) | #"f" => Some (Char.chr 12)
+                | #"r" => Some (Char.chr 13) | _ => None;
+          in case escaped of Some ch => read_string_rev es (ch::acc) (next_loc 2 loc)
+            | None => if Char.isDigit e then
+                (case read_char_as_3digits rest of None => (ErrorS,loc,rest)
+                 | Some (ch,tail) => read_string_rev tail (ch::acc) (next_loc 4 loc))
+              else (ErrorS,loc,rest) end;
+  fun mkCharS sym = case sym of StringS s =>
+      if String.size s = 1 then CharS (String.sub s 0) else ErrorS | _ => ErrorS;
+  fun skip_comment cs depth loc = case cs of x::y::xs =>
+      if x = #"(" andalso y = #"*" then skip_comment xs (depth+1) (next_loc 2 loc)
+      else if x = #"*" andalso y = #")" then
+        if depth = 0 then Some (xs,next_loc 2 loc) else skip_comment xs (depth-1) (next_loc 2 loc)
+      else if x = #"\n" then skip_comment (y::xs) depth (next_line loc)
+      else skip_comment (y::xs) depth (next_loc 1 loc)
+    | _ => None;
+  fun read_FFIcall cs acc loc = case cs of [] => (ErrorS,loc,[])
+    | c::rest => if c = #")" then (FFIS (String.implode (List.rev acc)),next_loc 2 loc,rest)
+      else if c = #"\n" then (ErrorS,loc,rest)
+      else if Char.isSpace c then read_FFIcall rest acc (next_loc 1 loc)
+      else read_FFIcall rest (c::acc) (next_loc 1 loc);
+  fun read_Ident_ret acc name loc rest =
+    if acc = [] then (OtherS name,loc,rest) else (LongS (List.rev acc) name,loc,rest);
+  fun read_Ident cs loc acc = case cs of [] => (ErrorS,loc,[])
+    | c::rest => if single c then
+        if acc = [] then (OtherS (String.str c),next_loc 1 loc,rest) else (ErrorS,loc,rest)
+      else if isSymbol c then
+        let val (n,tail) = read_while isSymbol rest [c];
+        in read_Ident_ret acc (String.implode n) (next_loc (List.length n) loc) tail end
+      else if Char.isAlpha c then
+        let val (n,tail) = read_while identChar rest [c];
+            val newloc = next_loc (List.length n) loc;
+            val name = String.implode n;
+        in case tail of #"."::more => read_Ident more newloc (name::acc)
+             | _ => read_Ident_ret acc name newloc tail end
+      else (ErrorS,loc,rest);
+  fun next_sym cs loc = case cs of [] => None | c::rest =>
+    if c = #"\n" then next_sym rest (next_line loc)
+    else if Char.isSpace c then next_sym rest (next_loc 1 loc)
+    else if Char.isDigit c then
+      (case (c,rest) of (#"0",#"w"::ws) =>
+         (case ws of [] => Some (ErrorS,Ast.Locs loc loc,[])
+          | w::tail => if Char.isDigit w then
+              let val (n,r) = read_while Char.isDigit ws [];
+              in Some (WordS (from_digits 10 n),Ast.Locs loc (next_loc (List.length n+1) loc),r) end
+            else if w = #"x" then
+              let val (n,r) = read_while isHexDigit tail [];
+              in Some (WordS (from_digits 16 n),Ast.Locs loc (next_loc (List.length n+2) loc),r) end
+            else Some (ErrorS,Ast.Locs loc loc,ws))
+       | (#"0",#"x"::xs) => let val (n,r) = read_while isHexDigit xs [];
+           in Some (NumberS (from_digits 16 n),Ast.Locs loc (next_loc (List.length n) loc),r) end
+       | _ => let val (n,r) = read_while Char.isDigit rest [];
+           in Some (NumberS (from_digits 10 (c::n)),Ast.Locs loc (next_loc (List.length n) loc),r) end)
+    else if c = #"~" andalso (case rest of h::_ => Char.isDigit h | _ => False) then
+      let val (n,r) = read_while Char.isDigit rest [];
+      in Some (NumberS (~(from_digits 10 n)),Ast.Locs loc (next_loc (List.length n+1) loc),r) end
+    else if c = #"'" then let val (n,r) = read_while identChar rest [c];
+      in Some (OtherS (String.implode n),Ast.Locs loc (next_loc (nsub (List.length n) 1) loc),r) end
+    else if c = #"\"" then let val (t,l,r) = read_string_rev rest [] (next_loc 1 loc);
+      in Some (t,Ast.Locs loc l,r) end
+    else if prefix [#"*",#")"] cs then Some (ErrorS,Ast.Locs loc (next_loc 2 loc),drop 1 rest)
+    else if prefix [#"#",#"\""] cs then
+      let val (t,l,r) = read_string_rev (drop 1 rest) [] (next_loc 2 loc);
+      in Some (mkCharS t,Ast.Locs loc l,r) end
+    else if prefix [#"#",#"("] cs then
+      let val (t,l,r) = read_FFIcall (drop 1 rest) [] (next_loc 2 loc);
+      in Some (t,Ast.Locs loc l,r) end
+    else if prefix [#"(",#"*"] cs then
+      (case skip_comment (drop 1 rest) 0 (next_loc 2 loc) of
+        None => Some (ErrorS,Ast.Locs loc (next_loc 2 loc),[])
+      | Some (r,l) => next_sym r l)
+    else if c = #"_" then Some (OtherS "_",Ast.Locs loc loc,rest)
+    else let val (t,l,r) = read_Ident cs loc [];
+         in Some (t,Ast.Locs loc l,r) end;
+  fun to_path ns = case ns of [] => End | n::rest => Mod n (to_path rest);
+  fun token_of_sym sym = case sym of ErrorS => LexErrorT | StringS s => StringT s
+    | CharS c => CharT c | NumberS n => IntT n | WordS n => WordT n
+    | LongS ns s => LongidT (to_path ns) s | FFIS s => FFIT s | OtherS s => get_token s;
+  fun next_token cs loc = case next_sym cs loc of None => None
+    | Some (sym,l,r) => Some (token_of_sym sym,l,r);
+  fun lexer_fun_aux cs loc = case next_token cs loc of None => []
+    | Some (t,Ast.Locs start finish,r) => (t,Ast.Locs start finish)::lexer_fun_aux r (next_loc 1 finish);
+  fun lexer_fun cs = lexer_fun_aux cs init_loc;
+  fun lex source = lexer_fun (String.explode source);
+end;

@@ -1,0 +1,26 @@
+structure TypeDeclarationTests = struct
+  open CandleTypeDeclarations;
+  fun check conv (nt,name,input,expected) =
+    ParserTests.check (name ^ "/" ^ input) (ConversionTests.run nt conv input = expected);
+  val _ = List.app (check ptree_Record) record_golden;
+  val _ = List.app (check ptree_ConstrDecl) ctor_golden;
+  val _ = List.app (check ptree_TypeDefs) typedefs_golden;
+  val _ = List.app (check ptree_ExcDefinition) exception_golden;
+  fun unit_conv name = case name of "ptree_ExcType" => ptree_ExcType
+    | "ptree_ValType" => ptree_ValType | "ptree_OpenMod" => ptree_OpenMod
+    | "ptree_IncludeMod" => ptree_IncludeMod
+    | _ => raise Fail ("unknown unit converter: " ^ name);
+  val _ = List.app (fn row => let val (_,name,_,_) = row;
+                             in check (unit_conv name) row end) unit_golden;
+  (* Hand checks isolate tuple packaging and deferred record-field validation. *)
+  val it = Ast.Atapp [] (Ast.Short "int");
+  val bt = Ast.Atapp [] (Ast.Short "bool");
+  val _ = ParserTests.check "hand/ctor-tuple-packaging"
+    (ctor_tup [] = [] andalso ctor_tup [it] = [it] andalso
+     ctor_tup [it,bt] = [Ast.Attup [it,bt]]);
+  val _ = ParserTests.check "hand/record-order-retained"
+    (ConversionTests.run NRecord ptree_Record "{z:int;a:bool}" = Inr [("z",it),("a",bt)]);
+  val _ = ParserTests.check "hand/duplicate-fields-not-yet-rejected"
+    (ConversionTests.run NRecord ptree_Record "{x:int;x:bool}" = Inr [("x",it),("x",bt)]);
+  val _ = print "TYPE_DECLARATION_TESTS_OK\n";
+end;

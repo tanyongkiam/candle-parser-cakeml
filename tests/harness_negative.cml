@@ -1,0 +1,1 @@
+val _ = ParserTests.check "intentional harness failure" False;

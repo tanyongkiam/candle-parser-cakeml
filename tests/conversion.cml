@@ -1,0 +1,59 @@
+structure ConversionTests = struct
+  open CandlePatterns;
+  fun run nt conv source = case CandleFrontEnd.destResult
+      (CandleGrammar.parse_nt nt (CandleLexer.lex source)) of
+      CandlePeg.Failure l msg => Inl (l,msg)
+    | CandlePeg.Success _ [pt] _ => conv pt
+    | _ => Inl (unknown_loc,"layer: expected one tree");
+  fun name_conv name = case name of
+      "ptree_Ident" => ptree_Ident
+    | "ptree_ValueName" => ptree_ValueName
+    | "ptree_ConstrName" => ptree_ConstrName
+    | "ptree_ModuleName" => ptree_ModuleName
+    | "ptree_ModTypeName" => ptree_ModTypeName
+    | "ptree_FieldName" => ptree_FieldName
+    | "ptree_OperatorName" => ptree_OperatorName
+    | _ => raise Fail ("unknown name converter: " ^ name);
+  fun path_conv name = case name of
+      "ptree_ValuePath" => ptree_ValuePath
+    | "ptree_ModulePath" => ptree_ModulePath
+    | "ptree_Constr" => ptree_Constr
+    | "ptree_TypeConstr" => ptree_TypeConstr
+    | "ptree_ModTypePath" => ptree_ModTypePath
+    | _ => raise Fail ("unknown path converter: " ^ name);
+  val _ = List.app (fn (nt,conv,input,expected) => ParserTests.check
+    (conv ^ "/" ^ input) (run nt (name_conv conv) input = expected)) name_golden;
+  val _ = List.app (fn (nt,conv,input,expected) => ParserTests.check
+    (conv ^ "/" ^ input) (run nt (path_conv conv) input = expected)) path_golden;
+  val _ = List.app (fn (nt,conv,input,expected) => ParserTests.check
+    (conv ^ "/" ^ input) (run nt ptree_Type input = expected)) type_golden;
+  val _ = List.app (fn (nt,conv,input,expected) => ParserTests.check
+    (conv ^ "/" ^ input) (run nt ptree_Literal input = expected)) literal_golden;
+  val _ = List.app (fn (nt,conv,input,expected) => ParserTests.check
+    (conv ^ "/" ^ input) (run nt ptree_Pattern input = expected)) pattern_golden;
+
+  (* Hand-checked expectations, independent of the oracle serializer. *)
+  val _ = ParserTests.check "hand/path-renaming"
+    (run NConstr ptree_Constr "Pretty_printer.Pp_data" = Inr ["PrettyPrinter","PP_Data"]);
+  val _ = ParserTests.check "hand/function-right-associativity"
+    (run NType ptree_Type "int -> bool -> string" = Inr
+      (Ast.Atfun (Ast.Atapp [] (Ast.Short "int"))
+        (Ast.Atfun (Ast.Atapp [] (Ast.Short "bool")) (Ast.Atapp [] (Ast.Short "string")))));
+  val _ = ParserTests.check "hand/or-distribution"
+    (run NPattern ptree_Pattern "Some (x | y)" = Inr
+      [Inr (Ast.Pcon (Some (Ast.Short "Some")) [Ast.Pvar "x"]),
+       Inr (Ast.Pcon (Some (Ast.Short "Some")) [Ast.Pvar "y"])]);
+  val _ = ParserTests.check "hand/compat-wildcard"
+    (run NPattern ptree_Pattern "Abs _" = Inr
+      [Inr (Ast.Pcon (Some (Ast.Short "Abs")) [Ast.Pany,Ast.Pany])]);
+  val _ = ParserTests.check "hand/record-restriction"
+    (run NPattern ptree_Pattern "Some (Foo {x})" =
+      Inl (unknown_loc,"Record patterns may only appear at the top level"));
+  (* Interleave invalid input and require repeat-call independence. *)
+  val first_result = run NPattern ptree_Pattern "x::y::zs";
+  val _ = run NPattern ptree_Pattern "x::";
+  val _ = run NPattern ptree_Pattern "";
+  val _ = ParserTests.check "hand/repeated-call"
+    (first_result = run NPattern ptree_Pattern "x::y::zs");
+  val _ = print "CONVERSION_TESTS_OK\n";
+end;

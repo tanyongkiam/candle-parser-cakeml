@@ -1,0 +1,5 @@
+val _ = List.app (fn (name,input,expected) =>
+  let val actual = CandleFrontEnd.destResult
+        (CandleGrammar.parse_tokens (CandleLexer.lex input));
+  in ParserTests.check ("grammar/" ^ name) (actual = expected) end) tree_golden;
+val _ = print "GRAMMAR_TESTS_OK\n";

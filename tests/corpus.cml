@@ -1,0 +1,9 @@
+structure CandleCorpusTests = struct
+  val _ = ParserTests.check "corpus/counts"
+    (List.length corpus_golden = 2 andalso List.length limits_golden = 18);
+  val _ = List.app (fn (name,input,expected) => ParserTests.check
+    ("corpus/" ^ name) (CandleParser.parse input = expected)) corpus_golden;
+  val _ = List.app (fn (name,input,expected) => ParserTests.check
+    ("limits/" ^ name) (CandleParser.parse input = expected)) limits_golden;
+  val _ = print "CANDLE_CORPUS_GOLDENS_OK corpus=6 conditional_controls=14\n";
+end;

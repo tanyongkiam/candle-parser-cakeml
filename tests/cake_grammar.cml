@@ -1,0 +1,28 @@
+val _ = List.app (fn (nt,input,expected) =>
+  let val state = CakeGrammar.parse_nt nt (CakeLexer.lex input);
+  in case state of CandlePeg.Result actual =>
+       ParserTests.check ("cake-grammar/" ^ input) (actual = expected)
+     | _ => ParserTests.check ("cake-grammar/nonterminal state/" ^ input) False
+  end) cakegrammar_golden;
+
+(* Independent small checks. Prefix acceptance is intentional for CML pragmas;
+   do not replace this entry point with CandleFrontEnd's complete-input check. *)
+val _ = ParserTests.check "cake-grammar/empty tree"
+  (case CakeGrammar.parse_tokens [] of
+    CandlePeg.Result (CandlePeg.Success []
+      [CandleTree.Nd ((Inl CakeGrammar.NTopLevelDecs),loc) []] _) =>
+        loc = Ast.Locs Ast.Unknownpt Ast.Unknownpt
+  | _ => False);
+val _ = ParserTests.check "cake-grammar/malformed prefix remains"
+  (let val tokens = CakeLexer.lex "val = ;"
+   in case CakeGrammar.parse_tokens tokens of
+     CandlePeg.Result (CandlePeg.Success remaining
+       [CandleTree.Nd ((Inl CakeGrammar.NTopLevelDecs),_) []] _) => remaining = tokens
+   | _ => False end);
+val _ = ParserTests.check "cake-grammar/failed type variable uses reference EOF message"
+  (case CakeGrammar.parse_nt CakeGrammar.NTyvarN [] of
+    CandlePeg.Result (CandlePeg.Failure loc message) =>
+      loc = Ast.Locs Ast.Eofpt Ast.Eofpt andalso
+      message = "Failed to see expected token; saw EOF instead"
+  | _ => False);
+val _ = print "CAKE_GRAMMAR_TESTS_OK\n";

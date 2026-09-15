@@ -1,0 +1,12 @@
+(*
+  Checks that the CakeML AST types of the Ast module are usable in the REPL:
+  values are built from the constructors, annotated with the types, and
+  printed by the generated pretty-printers.
+*)
+print "repl_ast:begin\n";
+val e = Ast.App Ast.Opapp [Ast.Ident (Ast.Short "f"); Ast.Lit (Ast.Intlit 1)];
+val p = Ast.Pcon (Some (Ast.Short "::")) [Ast.Pvar "x"; Ast.Pany];
+val l = Ast.Locs (Ast.Posn 1 2) Ast.Unknownpt;
+val d = Ast.Dlet l p e;
+val ds = ([d; Ast.Dtabbrev l [] "t" (Ast.Atapp [] (Ast.Short "int"))] : Ast.dec list);
+val n = List.length ds;
