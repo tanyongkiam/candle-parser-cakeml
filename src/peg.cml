@@ -2,8 +2,8 @@
    error-stack order and list-tail sharing identical to the reference. *)
 structure CandlePeg = struct
   datatype ('a,'b,'c,'e) symbol =
-      Empty 'c | Any ('a * Ast.locs -> 'c)
-    | Tok ('a -> bool) ('a * Ast.locs -> 'c)
+      Empty 'c | Any ('a * CandleLocation.locs -> 'c)
+    | Tok ('a -> bool) ('a * CandleLocation.locs -> 'c)
     | Nt 'b ('c -> 'c)
     | Seq (('a,'b,'c,'e) symbol) (('a,'b,'c,'e) symbol) ('c -> 'c -> 'c)
     | Choice (('a,'b,'c,'e) symbol) (('a,'b,'c,'e) symbol) (('c,'c) sum -> 'c)
@@ -14,25 +14,25 @@ structure CandlePeg = struct
     | Appf1 ('c -> 'c) (('a,'b,'c,'e) kont)
     | Appf2 ('c -> 'c -> 'c) (('a,'b,'c,'e) kont)
     | DropErr (('a,'b,'c,'e) kont)
-    | AddErr Ast.locs 'e (('a,'b,'c,'e) kont)
+    | AddErr CandleLocation.locs 'e (('a,'b,'c,'e) kont)
     | CmpErrs (('a,'b,'c,'e) kont)
-    | CmpEO ((Ast.locs * 'e) option) (('a,'b,'c,'e) kont)
-    | ReturnTo (('a * Ast.locs) list) ('c option list) (('a,'b,'c,'e) kont)
-    | RestoreEO ((Ast.locs * 'e) option) (('a,'b,'c,'e) kont)
+    | CmpEO ((CandleLocation.locs * 'e) option) (('a,'b,'c,'e) kont)
+    | ReturnTo (('a * CandleLocation.locs) list) ('c option list) (('a,'b,'c,'e) kont)
+    | RestoreEO ((CandleLocation.locs * 'e) option) (('a,'b,'c,'e) kont)
     | Poplist ('c list -> 'c) (('a,'b,'c,'e) kont)
     | Listsym (('a,'b,'c,'e) symbol) ('c list -> 'c) (('a,'b,'c,'e) kont)
     | Done | Failed;
-  datatype ('a,'c,'e) result = Success 'a 'c ((Ast.locs * 'e) option)
-                           | Failure Ast.locs 'e;
+  datatype ('a,'c,'e) result = Success 'a 'c ((CandleLocation.locs * 'e) option)
+                           | Failure CandleLocation.locs 'e;
   datatype ('a,'b,'c,'e) state =
-      EV (('a,'b,'c,'e) symbol) (('a * Ast.locs) list) ('c option list)
-         ((Ast.locs * 'e) option) ((Ast.locs * 'e) list)
+      EV (('a,'b,'c,'e) symbol) (('a * CandleLocation.locs) list) ('c option list)
+         ((CandleLocation.locs * 'e) option) ((CandleLocation.locs * 'e) list)
          (('a,'b,'c,'e) kont) (('a,'b,'c,'e) kont)
-    | AP (('a,'b,'c,'e) kont) (('a * Ast.locs) list) ('c option list)
-         ((Ast.locs * 'e) option) ((Ast.locs * 'e) list)
-    | Result ((('a * Ast.locs) list,'c,'e) result) | Looped;
+    | AP (('a,'b,'c,'e) kont) (('a * CandleLocation.locs) list) ('c option list)
+         ((CandleLocation.locs * 'e) option) ((CandleLocation.locs * 'e) list)
+    | Result ((('a * CandleLocation.locs) list,'c,'e) result) | Looped;
 
-  val eof = Ast.Locs Ast.Eofpt Ast.Eofpt;
+  val eof = CandleLocation.Locs CandleLocation.Eofpt CandleLocation.Eofpt;
   fun sloc input = case input of [] => eof | (_,l)::_ => l;
   fun maxerr (l1,e1) (l2,e2) =
     if CandleSupport.locsle l1 l2 then (l2,e2) else (l1,e1);

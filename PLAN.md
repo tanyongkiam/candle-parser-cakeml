@@ -1,5 +1,25 @@
 # Plan: faithful Candle parser in the Ast-enabled REPL
 
+## M7 amendment — 2026-10-03
+
+The September completion/checklist below is historical. Current M7 uses the
+fresh direct-AST M6 runtime and the approved separate `CandleParser.locs` error
+API; successes remain current `Ast.dec list`. Parser helpers stay hidden. An
+optional `CandleReader.install ()` adapter feeds parsed ASTs into the existing
+REPL interface without changing the pure parser. It retries first-byte input
+exceptions and fails closed after a mid-phrase exception; safe draining is
+deferred. Current acceptance requires fresh independent HOL goldens, all
+in-scope layers/public/corpus/boundary cases, comprehensive real reader/Eval
+testing and final Astra audit, as tracked in `TEST_GAPS.md` and the enclosing
+issue #1314 plan. No optimization/JUrban change or bootstrap parser retirement
+is part of M7; the latter belongs to M8. No September pass proves these gates.
+
+Current evidence: all 21 in-scope fixture sets are independently regenerated;
+2,012 exact layer comparisons and 972 hidden-public comparisons pass. Framing,
+real reader/Eval integration, full-public negative controls and cache-free
+standalone build/tests pass. Astra approves all six gates; M7 is complete.
+HOL usage has finished. See `TEST_GAPS.md` for the evidence inventory.
+
 ## Scope amendment — 2026-09-16
 
 The user has explicitly deferred the embedded CakeML parser. The current
@@ -74,10 +94,15 @@ or completion gates.
 Implement the CakeML module `CandleParser`, loaded into the supplied `cake-ast-parse-ident --repl`. It consumes a complete source string and returns either an error value or source declarations, using the existing `Ast` types:
 
 ```sml
-CandleParser.parse : string -> ((Ast.locs * string), Ast.dec list) sum
+CandleParser.parse : string -> ((CandleParser.locs * string), Ast.dec list) sum
 ```
 
-This is the current `caml_parser.run` result shape, with a public string wrapper around its character-list input. `Inl (location, message)` means failure; `Inr declarations` means success. Verify the exact displayed type/constructor names against the executable when implementing.
+This preserves the current `caml_parser.run` result shape with parser-owned
+error locations and a public string wrapper around its character-list input.
+`Inl (location, message)` means failure; `Inr declarations` means success.
+The public error datatype retains HOL unknown/EOF markers that current
+`Ast.locs` cannot represent; declaration lowering applies the reference's
+`to_locs` conversion at the AST boundary.
 
 The parser is pure: no I/O, global parser state, runtime evaluation, or exception-based syntax-error API. Do not catch all runtime exceptions and turn programming errors into parse failures. Resource exhaustion is not a syntax error.
 

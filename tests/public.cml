@@ -1,26 +1,43 @@
 (* Only the public API and Ast may be used here, never private lexer/converters. *)
 structure PublicParserTests = struct
+  fun position_kind pos = case pos of
+      CandleParser.Posn _ _ => 0
+    | CandleParser.Unknownpt => 1
+    | CandleParser.Eofpt => 2;
+  val _ = ParserTests.check "public/location-contract"
+    (let val loc = CandleParser.Locs CandleParser.Unknownpt CandleParser.Eofpt
+         val error : ((CandleParser.locs * string), Ast.dec list) sum =
+           Inl (loc,"test error")
+     in position_kind (CandleParser.Posn 2 3) = 0 andalso
+        position_kind CandleParser.Unknownpt = 1 andalso
+        position_kind CandleParser.Eofpt = 2 andalso
+        error <> Inr [] andalso
+        (case error of
+           Inl (CandleParser.Locs CandleParser.Unknownpt CandleParser.Eofpt,msg) =>
+             msg = "test error"
+         | _ => False)
+     end);
   (* These frozen initial cases predate the Candle-only scope reduction. All
      pragma-bearing inputs have the exact marker in their source string. *)
   val initial = List.filter (fn (_,source,_) =>
     not (String.isSubstring "(*CML" source)) parser_golden;
   val _ = ParserTests.check "public/counts"
-    (List.length initial = 60 andalso List.length expanded_golden = 712 andalso
+    (List.length initial = 60 andalso List.length expanded_golden = 892 andalso
      List.length corpus_golden = 2 andalso List.length limits_golden = 18);
   val _ = List.app (fn (name,source,expected) => ParserTests.check
     ("public-bundle/" ^ name) (CandleParser.parse source = expected))
     (initial @ expanded_golden @ corpus_golden @ limits_golden);
-  val identity = Inr [Ast.Dlet (Ast.Locs (Ast.Posn 0 0) (Ast.Posn 0 11))
+  val identity = Inr [Ast.Dlet (Ast.Locs (0,0) (0,11))
     (Ast.Pvar "id") (Ast.Fun "x" (Ast.Ident (Ast.Short "x")))];
   val _ = ParserTests.check "public/identity"
     (CandleParser.parse "let id x = x;;" = identity);
   val _ = ParserTests.check "public/empty" (CandleParser.parse "" = Inr []);
   val _ = ParserTests.check "public/unsupported-pragma"
     (CandleParser.parse "(*CML val x=1; *)" =
-      Inl (Ast.Locs (Ast.Posn 0 0) (Ast.Posn 0 12),
+      Inl (CandleParser.Locs (CandleParser.Posn 0 0) (CandleParser.Posn 0 12),
         "CakeML pragmas are not supported by this Candle-only parser"));
   val _ = CandleParser.parse "let = ;;";
   val _ = ParserTests.check "public/repeated"
     (CandleParser.parse "let id x = x;;" = identity);
-  val _ = print "CANDLE_PUBLIC_BUNDLE_OK comparisons=792\n";
+  val _ = print "CANDLE_PUBLIC_BUNDLE_OK comparisons=972\n";
 end;

@@ -3,7 +3,11 @@
 The repository includes one current runtime source:
 `cake-ident.S`, copied from the user's rebuilt CakeML
 `compiler/bootstrap/compilation/x64/64/cake.S`, and its matching
-`../config_enc_str.txt`. It exposes the real `Ast.Ident` constructor.
+`../config_enc_str.txt`. The current copy is the completed issue #1314 M6 build
+(2026-10-03); it exposes `Ast.Ident`, integer-pair AST locations and the
+direct-AST `Repl.nextInput` interface. Matching migrated `repl_boot.cml` and
+`candle_boot.ml` were copied with it. No HOL/bootstrap rebuild was run to link
+this standalone copy.
 
 From the project root:
 
@@ -43,14 +47,20 @@ or original upstream source was changed by this adjustment.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| New original bootstrap assembly | `aecb0da8f4f87945d4dfb82577d745ff39731bcc2b19e55c0ba7779dc18ef935` |
-| Included adjusted `cake-ident.S` | `302d373f63c5b79e2940f1121f315c9d2e58c2cb580640b0f9963ffa9f101f64` |
+| New original bootstrap assembly | `520711aab3983c74b24382af6cb9190b8c5cc366e3319f45adad3fdf4b2a6b2f` |
+| Included adjusted `cake-ident.S` | `2fdd9a64ca6586db07adb32c99a56f956e425b56865839c22002f423a308049d` |
 | Included `basis_ffi.c` | `ca80a94c7269208bd169b8cf54c60c498f6194b0669b590be565ca929bef301c` |
-| Matching configuration | `a108fb64b1c7a78ffc24dd2c0b7194e36fba5808e2797b6b6797dec849852ce6` |
-| Verified built executable | `b2e35989a1ea1b31f99c6b2fbb92db5f6063f4bd2eeb511ffcbc973e933335fc` |
+| Matching configuration | `3f29f536ae734b28c15d0adac8be9397b5c7f020fa3f5529a18a9daf6e4caa70` |
+| Built executable | `621d9552aef15cde336b82c16e94223d136954212eb5e60f8c0221195b9b2df6` |
+| Matching `repl_boot.cml` | `a2caba62066d19ac11fe54cdf4bf24701e1e953e0ac404b8fdc567955bff8554` |
+| Matching `candle_boot.ml` | `a70784a8def58d511a9ddde408ec9f3aee67fad4817f8d9d25e5cd5beb8615ef` |
 
-A relocated, cache-free copy rebuilt the executable byte-for-byte and passed
-the complete hidden-bundle/layer tests. Different compiler/platform versions
+September's relocated, cache-free check rebuilt the previous executable
+byte-for-byte and passed its then-current suites. That historical result does
+not validate this M6 refresh. The 2026-10-03 cache-free source export also
+reproduced the current binary byte-for-byte and passed the complete M7 test
+campaign; see `../STANDALONE.md`.
+Different compiler/platform versions
 may change binary bytes; structural parser goldens remain the correctness test.
 Compiled executables are ignored, not committed.
 
@@ -61,13 +71,8 @@ the REPL banner. The matching configuration above works. Old executables,
 assembly and configuration remain only in the original development workspace;
 they are not required or versioned here. Do not substitute them into this build.
 
-The source manifest's Ast entry was updated for user commit
-`7155011a29215f042d266bcc1061919d254766ee`, which changes only
-`Overload Var[inferior] = “Ident”` to `Overload Var = “Ident”`.
-Its previous source SHA-256 was
-`be65aeca4359d9060dd922282da7c299ea0b59d74970d3333fe30a145d9a1921`;
-the current hash is
-`02fe78a17c585fbea7e2f8add2cd1de713a4a0de3fa0e7e98a047150129ea84f`.
-This changes HOL name resolution, not the Ast datatype or parser definitions.
-All 23 other read-only source hashes were unchanged at verification. Original
-proof sources remain external, read-only reference material.
+`../SOURCES.tsv` records the current reference hashes, including the changed
+Ast ABI and converters. Its frozen `reference/` corpus rows describe historical
+snapshots, not the migrated active boot files. September's Ident/overload-only
+source comparison does not establish the current M6 reference identity.
+Original proof sources remain external, read-only reference material.

@@ -6,7 +6,7 @@ structure CandleTypeDeclarations = struct
   open CandleTypes;
   type ctor = ((string * Ast.ast_t list),(string * (string * Ast.ast_t) list)) sum;
   type type_info = (Ast.ast_t,ctor list) sum;
-  type type_def = Ast.locs * string list * string * type_info;
+  type type_def = CandleLocation.locs * string list * string * type_info;
   fun ptree_FieldDec pt = case pt of
       Lf (_,l) => Inl (l,"Expected a field declaration non-terminal")
     | Nd (n,l) args => if n <> Inl NFieldDec then Inl (l,"Expected a field declaration non-terminal")
@@ -33,7 +33,7 @@ structure CandleTypeDeclarations = struct
       else case args of ty::rest => bind (ptree_Type ty) (fn t =>
         fmap (fn ts => t::ts) (ptree_StarTypes rest))
       | _ => Inl (l,"Impossible: nConstrArgs");
-  fun ptree_ConstrDecl pt : ((Ast.locs * string),ctor) sum = case pt of
+  fun ptree_ConstrDecl pt : ((CandleLocation.locs * string),ctor) sum = case pt of
       Lf (_,l) => Inl (l,"Expected a constructor declaration non-terminal")
     | Nd (n,l) args => if n <> Inl NConstrDecl then Inl (l,"Expected a constructor declaration non-terminal")
       else case args of [name] => fmap (fn nm => Inl (nm,[])) (ptree_ConstrName name)
@@ -57,7 +57,7 @@ structure CandleTypeDeclarations = struct
       else case args of [exnt,cdecl] => bind (expect_tok exnt ExceptionT) (fn _ =>
         bind (ptree_ConstrDecl cdecl) (fn res => case res of
           Inr _ => Inl (l,"Record type exceptions are forbidden")
-        | Inl (nm,ts) => Inr (Ast.Dexn l nm (ctor_tup ts))))
+        | Inl (nm,ts) => Inr (Ast.Dexn (to_locs l) nm (ctor_tup ts))))
       | [exnt,lhs,eq,rhs] => Inl (l,"Exception abbreviation is not supported")
       | _ => Inl (l,"Impossible: nExcDefinition");
   fun ptree_TypeRepr pt = case pt of Lf (_,l) => Inl (l,"Expected a type-repr non-terminal")
@@ -100,7 +100,7 @@ structure CandleTypeDeclarations = struct
       | lp::tv::rest => bind (expect_tok lp LparT) (fn _ =>
           bind (ptree_TypeName tv) (fn tn => fmap (fn ts => tn::ts) (ptree_TypeParamList rest)))
       | _ => Inl (l,"Impossible: nTypeParams");
-  fun ptree_TypeDef pt : ((Ast.locs * string),type_def) sum = case pt of
+  fun ptree_TypeDef pt : ((CandleLocation.locs * string),type_def) sum = case pt of
       Lf (_,l) => Inl (l,"Expected a typedef non-terminal")
     | Nd (n,l) args => if n <> Inl NTypeDef then Inl (l,"Expected a typedef non-terminal")
       else case args of [params,id,info] => bind (ptree_TypeParams params) (fn tys =>

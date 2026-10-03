@@ -13,7 +13,8 @@ Current fresh-REPL load order:
 
 The default `tools/load_parser.py` output (or `make bundle` at the project
 root) encloses the first 17 files in `local`, exports only `parser.cml` in
-the `in` branch, and closes with `end`. Only `CandleParser.parse` is public.
+the `in` branch, and closes with `end`. `CandleParser.parse` and its
+error-location types/constructors are public; implementation modules stay hidden.
 Use `--internals` or individual source files for layer debugging; all existing
 layer suites intentionally retain that development path. `--suite public`
 checks the hidden bundle independently, and `tools/test_bundle.py` checks
@@ -26,7 +27,9 @@ that every helper module really is inaccessible after fresh `#use` loading.
 5. `expression_support.cml`, `expressions.cml`, `declarations.cml`, `parser.cml`
 
 The above **18 files** are the Candle-only implementation. `CandleParser.parse`
-is implemented and passes the 1,832-comparison suite. The user deferred
+is implemented. The current Ast/error-location migration passes 2,012 exact
+independent-reference comparisons and comprehensive current-runtime integration
+tests; September's 1,832-comparison suite is historical. The user deferred
 `(*CML ... *)`, which returns `CandleDeclarations.pragma_error` at its parse-tree
 location. This deliberate exception is the only planned behavior change.
 
@@ -57,7 +60,7 @@ assets have their own provenance in the manifest and
 
 | Ported file | Original source file(s) | Definitions / scope |
 | --- | --- | --- |
-| [support.cml](support.cml) | `HOL: examples/formal-languages/context-free/locationScript.sml`; `CakeML: semantics/lexer_funScript.sml`; `CakeML: compiler/parsing/ocaml/caml_lexScript.sml` | `unknown_loc`, location ordering/merging; `next_loc`, `next_line`, `init_loc`; `take_while`. Other list, numeric and character helpers are local adapters for the operations used by these sources, not a separate copied HOL module. |
+| [support.cml](support.cml) | `HOL: examples/formal-languages/context-free/locationScript.sml`; `CakeML: semantics/lexer_funScript.sml`; `CakeML: compiler/parsing/ocaml/caml_lexScript.sml` | Parser-owned `locn`/`locs`, `unknown_loc`, location ordering/merging; `next_loc`, `next_line`, `init_loc`; `take_while`. Other list, numeric and character helpers are local adapters for the operations used by these sources, not a separate copied HOL module. |
 | [tokens.cml](tokens.cml) | `CakeML: compiler/parsing/ocaml/caml_lexScript.sml` | `token`, `get_token`: Candle token vocabulary and reserved spellings. |
 | [lexer.cml](lexer.cml) | `CakeML: compiler/parsing/ocaml/caml_lexScript.sml` | Executable scanners, `next_sym`, token conversion and `lexer_fun`; `lex` is the port's native-string wrapper. |
 | [peg.cml](peg.cml) | `HOL: examples/formal-languages/context-free/pegexecScript.sml`; `HOL: examples/formal-languages/context-free/pegScript.sml` | Continuation/state datatypes, error selection, `coreloop`, `peg_exec`; PEG symbol constructors. See the loop/interface adaptation below. |
@@ -65,7 +68,7 @@ assets have their own provenance in the manifest and
 | [grammar_support.cml](grammar_support.cml) | `CakeML: compiler/parsing/ocaml/camlPEGScript.sml` | `sumID`, tree-building and grammar combinators, token predicates, operator/name predicates. Native helpers wrap the port's PEG constructors. |
 | [grammar.cml](grammar.cml) | `CakeML: compiler/parsing/ocaml/camlPEGScript.sml` | Nonterminal datatype and all 129 rule bodies. Original `nFoo` becomes `NFoo`; see vector storage and source chunking below. |
 | [front_end.cml](front_end.cml) | `CakeML: compiler/parsing/ocaml/caml_parserScript.sml` | `run_lexer`, `destResult`, and the front-end portion of `run`. `parse_tree` stops before AST conversion; it is not the final public parser. |
-| [conversion_support.cml](conversion_support.cml) | `CakeML: compiler/parsing/ocaml/camlPtreeConversionScript.sml` | Sum helpers (`bind`, `choice`, `mapM`, `option`, `fmap`), `list_cart_prod`, `compatCons`, `compatModName`, `destLf`, `expect_tok`, `path_to_ns`, `nterm_of`; token/identifier extraction is factored locally. |
+| [conversion_support.cml](conversion_support.cml) | `CakeML: compiler/parsing/ocaml/camlPtreeConversionScript.sml`; `CakeML: semantics/cmlPtreeConversionScript.sml` | Sum helpers (`bind`, `choice`, `mapM`, `option`, `fmap`), `list_cart_prod`, `compatCons`, `compatModName`, `destLf`, `expect_tok`, `path_to_ns`, `nterm_of`; the shared `to_locs` AST boundary comes from `cmlPtreeConversion`. Token/identifier extraction is factored locally. |
 | [names.cml](names.cml) | `CakeML: compiler/parsing/ocaml/camlPtreeConversionScript.sml` | `ptree_Ident`, name/path converters, `ptree_Op`, `ptree_OperatorName`; local `name` and `op_name` factor repeated cases. |
 | [types.cml](types.cml) | `CakeML: compiler/parsing/ocaml/camlPtreeConversionScript.sml` | `ptree_TVar`, `ptree_Type` and its recursive type-list helpers, `ptree_Literal`, `bool2id`, `ptree_Bool`, `ptree_Double`. |
 | [precedence.cml](precedence.cml) | `HOL: examples/formal-languages/context-free/precparserScript.sml` | `precparse1` (port name `step`), `precparse`, `isFinal`; machine-record fields become function arguments. |
@@ -81,10 +84,16 @@ assets have their own provenance in the manifest and
 | [declarations.cml](declarations.cml) | `CakeML: compiler/parsing/ocaml/camlPtreeConversionScript.sml` | `build_rec_funs`, `ptree_TypeDefinition`, `build_dlet`, `ptree_ExprDec`, signature/module converters, `ptree_Definition` family and `ptree_Start`. `distinct` implements `ALL_DISTINCT`. The pragma branch is explicitly unsupported by user direction. |
 | [parser.cml](parser.cml) | `CakeML: compiler/parsing/ocaml/caml_parserScript.sml` | `run_parser`/`run` after the existing `CandleFrontEnd.parse_tree`; native-string public wrapper. |
 | [cake_patterns.cml](cake_patterns.cml) | `CakeML: semantics/cmlPtreeConversionScript.sml` | Deferred `EtoPat` (`etoPat`), `ptree_OpID`, pattern/list converters, `dePat`, `mkFun`. Written but not yet validated; excluded from normal suites. |
+| [reader.cml](reader.cml) | `CakeML: compiler/compilerScript.sml`; framing reference `CakeML: candle/prover/candle_boot.ml` | Optional new I/O adapter, not a parser-definition port and not in `sources.list`. Local `locs_to_string`, `get_nth_line`, `safe_substring`, `find_next_newline` preserve the compiler's formatting. The small new byte-preserving framer omits the boot loader/quotations, tracks strings/chars/comments/blocks/brackets and hands complete original phrases to the public parser. Only `CandleReader.install ()` is exported. Current-runtime framing units, all nine real reader/Eval integration tests and the full independent parser golden campaign pass. |
 
 ### Expression/declaration representation details
 
-The runtime's `Ast.Ident` corresponds to HOL `Var`. In **exported AST fields**,
+The runtime's `Ast.Ident` corresponds to HOL `Ident`, also written `Var` through
+the existing HOL overload. Parser/error locations use `CandleLocation`;
+`CandleParser` re-exports its types/constructors. Only the reference's
+`to_locs` boundary converts positioned spans to `Ast.Locs` coordinate pairs,
+or sentinel-containing spans to `Ast.Nolocs`. Lexer/PEG/errors and converter
+metadata retain their full parser locations. In **exported AST fields**,
 HOL products remain nested binary pairs: recursive bindings are `(f,(v,e))`,
 and datatype definitions are `(tvs,(name,constructors))`. Port-private converter
 metadata keeps its documented native flat tuples. `build_letrec` and final

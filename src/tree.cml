@@ -1,8 +1,8 @@
 (* grammar.ptree restricted to token leaves; the executable grammars never
    construct an NT leaf. Nonterminal names retain the reference's sum shape. *)
 structure CandleTree = struct
-  datatype ('a,'b) tree = Lf ('a * Ast.locs)
-    | Nd ((('b,int) sum) * Ast.locs) (('a,'b) tree list);
+  datatype ('a,'b) tree = Lf ('a * CandleLocation.locs)
+    | Nd ((('b,int) sum) * CandleLocation.locs) (('a,'b) tree list);
   fun loc tree = case tree of Lf (_,l) => l | Nd (_,l) _ => l;
   fun list_loc trees = CandleSupport.merge_list_locs (List.map loc trees);
   fun mkNd nt children = Nd (nt,list_loc children) children;

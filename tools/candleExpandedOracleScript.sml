@@ -5,8 +5,8 @@ Libs
   preamble mlstringSyntax[qualified]
 
 (* Independent executable tests only: original HOL parser, no candidate code. *)
-val _ = use "oracle_support.sml";
-val _ = use "expanded_cases.sml";
+val _ = load "oracle_support";
+val _ = load "expanded_cases";
 
 fun inherited_oracle (name,nonterm,converter,source) =
   if String.isSubstring "(*CML" source then
@@ -31,9 +31,11 @@ fun inherited_oracle (name,nonterm,converter,source) =
        value nt ^ " (" ^ native ^ ") " ^ quoted source ^ " = " ^ value result ^ "),\n") end;
 
 fun public_oracle (name,source) = let
+  val _ = print ("EXPANDED_START " ^ quoted name ^ " " ^
+    Time.toString (Time.now ()) ^ "\n");
   val input = stringSyntax.lift_string bool source;
   val result = rhs (concl (EVAL ``caml_parser$run ^input``));
-in print ("EXPANDED_GOLDEN (" ^ quoted name ^ "," ^ quoted source ^ "," ^ value result ^ "),\n") end;
+in print ("EXPANDED_GOLDEN (" ^ quoted name ^ "," ^ quoted source ^ "," ^ public_value result ^ "),\n") end;
 
 val _ = List.app inherited_oracle inherited_cases;
 val _ = List.app public_oracle expanded_public_cases;

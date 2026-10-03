@@ -5,3 +5,14 @@ INCLUDES = $(CAKEML_ROOT)/compiler/parsing/ocaml
 else
 INCLUDES = ../../compiler/parsing/ocaml
 endif
+
+# One named gate for the five existing independent reference owners.
+.PHONY: m7-oracles
+m7-oracles: candleParserOracleTheory.dat candleExpandedOracleTheory.dat candleHelpersOracleTheory.dat candleCorpusOracleTheory.dat candleLimitsOracleTheory.dat
+
+# These libraries are loaded by name; track their compiled load manifests.
+candleParserOracleTheory.dat: oracle_support.uo
+candleExpandedOracleTheory.dat: oracle_support.uo expanded_cases.uo
+candleHelpersOracleTheory.dat: oracle_support.uo
+candleCorpusOracleTheory.dat: oracle_support.uo corpus_cases.uo
+candleLimitsOracleTheory.dat: oracle_support.uo limits_cases.uo

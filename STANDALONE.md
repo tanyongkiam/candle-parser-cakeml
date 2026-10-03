@@ -68,7 +68,17 @@ Verify reference hashes before regenerating; the Git commit alone does not
 capture the original working-tree baseline. Never replace expected results
 with candidate-generated answers.
 
-## Relocation verification — 2026-09-16
+## Current relocation verification — 2026-10-03
+
+A source-only export, without Git metadata, executables, caches, symlinks or
+a parent CakeML checkout, passed `make` and `make test` at
+`/tmp/candle-m7-standalone.jZusQ1`. Native linking reproduced the recorded M6
+copy byte-for-byte (`621d9552aef15cde336b82c16e94223d136954212eb5e60f8c0221195b9b2df6`).
+The complete public/layer/reader campaign passed, including all nine real
+reader/Eval tests (81.480 seconds). No HOL or bootstrap build was used.
+The temporary directory is test evidence, not a dependency or Git worktree.
+
+## Historical relocation verification — 2026-09-16
 
 A copy of the whole project was placed at `/tmp/candle-standalone.2nygKp`,
 excluding build/HOL/Python caches, with no parent CakeML tree or source symlinks.

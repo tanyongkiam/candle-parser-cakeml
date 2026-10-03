@@ -33,6 +33,14 @@ structure ConversionTests = struct
     (conv ^ "/" ^ input) (run nt ptree_Pattern input = expected)) pattern_golden;
 
   (* Hand-checked expectations, independent of the oracle serializer. *)
+  val _ = ParserTests.check "hand/to_locs-position"
+    (to_locs (CandleLocation.Locs (CandleLocation.Posn 2 3)
+      (CandleLocation.Posn 4 5)) = Ast.Locs (2,3) (4,5));
+  val _ = List.app (fn loc => ParserTests.check "hand/to_locs-sentinel"
+    (to_locs loc = Ast.Nolocs))
+    [unknown_loc, CandleLocation.Locs CandleLocation.Eofpt CandleLocation.Eofpt,
+     CandleLocation.Locs (CandleLocation.Posn 2 3) CandleLocation.Eofpt,
+     CandleLocation.Locs CandleLocation.Unknownpt (CandleLocation.Posn 4 5)];
   val _ = ParserTests.check "hand/path-renaming"
     (run NConstr ptree_Constr "Pretty_printer.Pp_data" = Inr ["PrettyPrinter","PP_Data"]);
   val _ = ParserTests.check "hand/function-right-associativity"

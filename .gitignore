@@ -1,4 +1,5 @@
 tools/.hol/
+tools/.hol4-mcp/
 tools/*Theory.dat
 tools/*Theory.sml
 tools/*Theory.sig

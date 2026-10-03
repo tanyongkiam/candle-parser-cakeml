@@ -2,7 +2,7 @@ val _ = List.app (fn (name,check) => ParserTests.check ("record-prep/" ^ name) (
   recordprep_golden;
 
 val _ = ParserTests.check "record-prep/sort then extract and tuple-pack"
-  (let val l = Ast.Locs Ast.Unknownpt Ast.Unknownpt;
+  (let val l = CandleSupport.unknown_loc;
        val a = Ast.Atvar "'a";
        val b = Ast.Atvar "'b";
        val sorted = CandleTypeDeclarations.sort_records
@@ -12,7 +12,7 @@ val _ = ParserTests.check "record-prep/sort then extract and tuple-pack"
         (l,[],"t",[("Foo",[Ast.Attup [a,b]])])
    end);
 val _ = ParserTests.check "record-prep/partition reverses each group"
-  (let val l = Ast.Locs Ast.Unknownpt Ast.Unknownpt;
+  (let val l = CandleSupport.unknown_loc;
        val ty = Ast.Atvar "a";
    in CandleTypeDeclarations.partition_types
         [(l,[],"t",Inl ty),(l,[],"d",Inr []),(l,[],"u",Inl ty),(l,[],"e",Inr [])] =

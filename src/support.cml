@@ -1,22 +1,28 @@
 (* Location/list operations used by the parser, ported from location and lexer_fun. *)
+structure CandleLocation = struct
+  datatype locn = Posn int int | Unknownpt | Eofpt;
+  datatype locs = Locs locn locn;
+end;
+
 structure CandleSupport = struct
-  val unknown_loc = Ast.Locs Ast.Unknownpt Ast.Unknownpt;
-  val init_loc = Ast.Posn 0 0;
+  open CandleLocation;
+  val unknown_loc = Locs Unknownpt Unknownpt;
+  val init_loc = Posn 0 0;
   fun next_loc n loc =
-    case loc of Ast.Posn r c => Ast.Posn r (c + n) | _ => loc;
+    case loc of Posn r c => Posn r (c + n) | _ => loc;
   fun next_line loc =
-    case loc of Ast.Posn r c => Ast.Posn (r + 1) 0 | _ => loc;
+    case loc of Posn r c => Posn (r + 1) 0 | _ => loc;
   fun locnle a b =
     case (a,b) of
-      (Ast.Unknownpt,_) => True
-    | (_,Ast.Eofpt) => True
-    | (Ast.Eofpt,_) => False
-    | (_,Ast.Unknownpt) => False
-    | (Ast.Posn r c,Ast.Posn s d) => r < s orelse (r = s andalso c <= d);
+      (Unknownpt,_) => True
+    | (_,Eofpt) => True
+    | (Eofpt,_) => False
+    | (_,Unknownpt) => False
+    | (Posn r c,Posn s d) => r < s orelse (r = s andalso c <= d);
   fun locsle a b =
-    case (a,b) of (Ast.Locs p q,Ast.Locs r s) => locnle p r;
+    case (a,b) of (Locs p q,Locs r s) => locnle p r;
   fun merge_locs a b =
-    case (a,b) of (Ast.Locs p q,Ast.Locs r s) => Ast.Locs p s;
+    case (a,b) of (Locs p q,Locs r s) => Locs p s;
   fun merge_list_locs xs =
     case xs of
       [] => unknown_loc

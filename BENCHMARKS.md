@@ -9,11 +9,18 @@ parsed programs. Whole-process peak RSS includes source compilation and the
 configured runtime heap, not just parser working memory.
 
 Packaging update: `tools/load_parser.py` now wraps the same source definitions
-in `local`, exposing only `CandleParser.parse`. The benchmark automatically uses
+in `local`, exposing `CandleParser.parse` and its error-location datatypes.
+The benchmark automatically uses
 that public bundle. The saved baseline below predates this wrapper: its load
 times/printed declarations are historical, not measurements of the new packaging.
 Parser definitions and golden expectations did not change. The old JSON path
 keys use the enclosing checkout's `parse/` prefix; see `STANDALONE.md`.
+
+M7 (2026-10-03) changes the runtime/AST location representation and adds the
+public error-location datatypes. All recorded timings below predate that
+migration; none is a current-runtime performance claim. This milestone's
+acceptance campaign tests fidelity and integration, not an optimization or
+benchmark comparison.
 
 ## Hidden public-bundle check — 2026-09-16
 

@@ -137,6 +137,112 @@ def generated():
     return cases
 
 
+def boundaries():
+    # Exercise lexer branches through the public parser, not just bare-token
+    # fixtures. Inputs only: acceptance, errors and locations come from HOL.
+    cases = []
+    for byte in (0, 1, 8, 9, 10, 13, 31, 32, 34, 39, 92, 126, 127, 128, 254, 255):
+        char = chr(byte)
+        literal = '\\' + char if char in '\\"' else char
+        cases.append((f'boundary-string-byte-{byte}',
+                      'let result = "' + literal + '";;'))
+    for i, escape in enumerate((r'\\', r'\"', r"\'", r'\n', r'\r', r'\t',
+                                r'\b', '\\ ', r'\000', r'\001', r'\254', r'\255',
+                                r'\256', r'\999', r'\x00', r'\xff', r'\xFF',
+                                r'\x0', r'\xgg', r'\o000', r'\o377', r'\o400',
+                                r'\o77', r'\q')):
+        cases.append((f'boundary-string-escape-{i}',
+                      'let result = "' + escape + '";;'))
+        cases.append((f'boundary-char-escape-{i}',
+                      "let result = '" + escape + "';;"))
+    for i, number in enumerate(('0', '0Xff', '0O377', '0B101', '0x', '0o', '0b',
+                                '0x_1', '0o8', '0b2', '1_', '1__2', '123l',
+                                '123L', '123n', '0xffL', '1.', '1._', '1..2',
+                                '1e', '1e+', '1e-2', '1E+2_3', '1.2e-3',
+                                '123456789012345678901234567890')):
+        cases.append((f'boundary-number-{i}', 'let result = ' + number + ';;'))
+    for i, whitespace in enumerate((' ', '\t', '\r\n', '\n\n', '\v', '\f')):
+        cases.extend([
+            (f'boundary-whitespace-success-{i}',
+             whitespace + 'let' + whitespace + 'result = 1;;'),
+            (f'boundary-whitespace-error-{i}',
+             whitespace + 'let result = ;;'),
+        ])
+    comments = ('(**)', '(* outer (* inner *) tail *)', '(*\n(*\n*)\n*)',
+                '(* " ;; *)', '(*', '(*)', '(* (* *)', '*)')
+    for i, comment in enumerate(comments):
+        cases.append((f'boundary-comment-{i}', comment + '\nlet result = 1;;'))
+    for i, source in enumerate(('let result = "unfinished', "let result = '",
+                                'let result = 1;;\x00', 'let result = 1;;\xff',
+                                'let result = [1;2', 'let result = (1,2',
+                                'module A = struct let result = 1',
+                                'let result = "a\nb";;\nlet = ;;',
+                                'let result = "(*CML not a pragma *) ;;";;',
+                                '(*cml ordinary comment *) let result = 1;;')):
+        cases.append((f'boundary-eof-or-trailing-{i}', source))
+    # Small explicit bounds keep the reference computation practical. These
+    # check shape/locations at scale, not a performance or stack-safety claim.
+    for depth in (1, 8, 4):
+        expression = '(' * depth + 'x' + ')' * depth
+        cases.append((f'boundary-parentheses-{depth}',
+                      'let result = ' + expression + ';;'))
+        cases.append((f'boundary-parentheses-missing-close-{depth}',
+                      'let result = ' + expression[:-1] + ';;'))
+    for size, identifier_size in zip((1, 2, 3), (1, 16, 64)):
+        cases.append((f'boundary-list-{size}',
+                      'let result = [' + ';'.join(map(str, range(size))) + '];;'))
+        cases.append((f'boundary-identifier-{identifier_size}',
+                      'let ' + 'x' * identifier_size + ' = 1;;'))
+    for i, (left, right) in enumerate((('+', '*'), ('::', '@'), ('&&', '||'),
+                                     ('+', '='), ('^', '='), ('o', 'THEN'),
+                                     (':=', '||'), ('**', '*'))):
+        for j, (a, b) in enumerate(((left, right), (right, left))):
+            cases.append((f'boundary-mixed-operators-{i}-{j}',
+                          f'let result = a {a} b {b} c;;'))
+    return cases
+
+
+def coverage_controls():
+    # Clause-by-clause M7 cross-check found gaps in signature branches and
+    # typed bindings. These are source inputs, not assumed successes: HOL
+    # independently decides acceptance, exact lowering and error precedence.
+    return [
+        ('coverage/module-alias', 'module Mod = Other;;'),
+        ('coverage/module-empty', 'module Mod = struct end;;'),
+        ('coverage/module-expression', 'module Mod = struct 1;; let x = 2;; x + 3 end;;'),
+        ('coverage/module-ascribed', 'module Mod : (sig val x:int end) = struct let x=1;; end;;'),
+        ('coverage/module-ascribed-path', 'module Mod : (Other.Signature) = struct end;;'),
+        ('coverage/signature-empty', 'module type SS = sig end;;'),
+        ('coverage/signature-parenthesized', 'module type SS = (sig end);;'),
+        ('coverage/signature-path', 'module type SS = Other.Signature;;'),
+        ('coverage/signature-val-semis', 'module type SS = sig val x:int;; val y:bool;; end;;'),
+        ('coverage/signature-type', "module type SS = sig type 'a t = Box of 'a end;;"),
+        ('coverage/signature-exception', 'module type SS = sig exception Boom of int end;;'),
+        ('coverage/signature-exception-record', 'module type SS = sig exception Boom of {x:int} end;;'),
+        ('coverage/signature-module-abstract', 'module type SS = sig module type Inner end;;'),
+        ('coverage/signature-module-assigned', 'module type SS = sig module type Inner = sig end end;;'),
+        ('coverage/signature-module-ascribed', 'module type SS = sig module type Inner : sig end end;;'),
+        ('coverage/signature-functor-one', 'module type SS = sig module type Inner (Arg:SS) : SS end;;'),
+        ('coverage/signature-functor-two', 'module type SS = sig module type Inner (Arg:SS) (More:SS) : SS end;;'),
+        ('coverage/signature-open-include', 'module type SS = sig open Other;; include More end;;'),
+        ('coverage/signature-missing-val-type', 'module type SS = sig val x: end;;'),
+        ('coverage/signature-missing-end', 'module type SS = sig val x:int;;'),
+        ('coverage/typed-function', 'let f = fun x : int -> x;;'),
+        ('coverage/typed-let-function', 'let f x : int = x;;'),
+        ('coverage/typed-letrec-function', 'let rec f x : int = f x;;'),
+        ('coverage/typed-letrec-local', 'let result = let rec f x : int = f x in f;;'),
+        ('coverage/typed-let-local', 'let result = let f x : int = x in f;;'),
+        ('coverage/array-update', 'let result = a.(i) <- v;;'),
+        ('coverage/string-update', 'let result = s.[i] <- c;;'),
+        ('coverage/empty-begin', 'let result = begin end;;'),
+        ('coverage/if-unit-else', 'let result = if p then f x;;'),
+        ('coverage/semis-only', ';;;;'),
+        ('coverage/multiple-expressions', '1;; let x=2;; x+3;;'),
+        ('coverage/quotation-unsupported', 'let result = `quoted`;;'),
+        ('coverage/file-directive-unsupported', '#use "missing-file";;'),
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cakeml-root', type=pathlib.Path,
@@ -159,7 +265,7 @@ def main():
             public.append((name + '/public', 'let (' + source + ') = golden_rhs;;'))
         elif nt == 'nType':
             public.append((name + '/public', 'type golden = ' + source + ';;'))
-    public += generated()
+    public += generated() + boundaries() + coverage_controls()
     print('val expanded_public_cases = [')
     print(',\n'.join('(' + ','.join(map(quoted, row)) + ')' for row in public))
     print('];')

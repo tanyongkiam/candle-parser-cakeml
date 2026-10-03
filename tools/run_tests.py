@@ -11,6 +11,10 @@ import sys
 from load_parser import program as public_program, sources as candle_sources
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+DEFAULT_EXECUTABLE = pathlib.Path(os.environ.get(
+    "CANDLE_PARSER_EXECUTABLE", str(ROOT / "cake-ast-parse-ident")))
+DEFAULT_RUNTIME_DIR = pathlib.Path(os.environ.get(
+    "CANDLE_PARSER_RUNTIME_DIR", str(ROOT)))
 MARKER = "CANDLE_PARSER_TESTS_OK"
 MARKER_LINE = re.compile(r"(?m)^[ \t]*(?:[>#][ \t]*)*" + MARKER + r"\r?$")
 DIAGNOSTIC = re.compile(
@@ -19,8 +23,8 @@ DIAGNOSTIC = re.compile(
 )
 
 
-def run(sources, tests, timeout, verbose=False, executable=ROOT / "cake-ast-parse-ident",
-        source_text=None):
+def run(sources, tests, timeout, verbose=False, executable=DEFAULT_EXECUTABLE,
+        source_text=None, runtime_dir=DEFAULT_RUNTIME_DIR):
     program = (source_text if source_text is not None else
                "\n".join(path.read_text() for path in sources))
     program += "\n" + "\n".join(path.read_text() for path in tests)
@@ -31,7 +35,7 @@ def run(sources, tests, timeout, verbose=False, executable=ROOT / "cake-ast-pars
     try:
         result = subprocess.run(
             [str(executable.resolve()), "--repl"],
-            cwd=ROOT, env=env, input=program, text=True, stdout=subprocess.PIPE,
+            cwd=runtime_dir.resolve(), env=env, input=program, text=True, stdout=subprocess.PIPE,
             # CakeML strings are bytes; the REPL may print bytes above 127.
             encoding="utf-8", errors="backslashreplace",
             stderr=subprocess.STDOUT, timeout=timeout,
@@ -66,19 +70,25 @@ def main():
     args.add_argument("--timeout", type=int, default=120)
     args.add_argument("--verbose", action="store_true")
     args.add_argument("--executable", type=pathlib.Path,
-                      default=ROOT / "cake-ast-parse-ident")
-    args.add_argument("--suite", choices=["lexer", "cakelexer", "cakegrammar", "cakeconversion", "grammar", "conversion", "candle", "all", "public"])
+                      default=DEFAULT_EXECUTABLE)
+    args.add_argument("--runtime-dir", type=pathlib.Path, default=DEFAULT_RUNTIME_DIR,
+                      help="working directory containing matching config_enc_str.txt and repl_boot.cml")
+    args.add_argument("--suite", choices=["lexer", "cakelexer", "cakegrammar", "cakeconversion", "grammar", "conversion", "candle", "all", "public", "reader"])
     opts = args.parse_args()
     extra_sources, extra_tests = opts.source, opts.test
     opts.source, opts.test = [], []
-    if opts.suite == "public":
+    if opts.suite in ("public", "reader"):
         if extra_sources:
-            args.error('--suite public cannot add exposed source modules; use --test for extra public checks')
+            args.error('public/reader suites cannot add exposed source modules; use --test for extra checks')
         opts.source = candle_sources()
-        opts.test = [ROOT / 'tests' / name for name in
-                     ('runtime.cml', 'ast_contract.cml', 'parser_golden.cml',
-                      'expanded_golden.cml', 'corpus_golden.cml', 'limits_golden.cml',
-                      'public.cml', 'harness_literals.cml')]
+        if opts.suite == "reader":
+            opts.source += [ROOT / 'src' / 'reader.cml']
+            opts.test = [ROOT / 'tests' / name for name in ('runtime.cml', 'reader.cml')]
+        else:
+            opts.test = [ROOT / 'tests' / name for name in
+                         ('runtime.cml', 'ast_contract.cml', 'parser_golden.cml',
+                          'expanded_golden.cml', 'corpus_golden.cml', 'limits_golden.cml',
+                          'public.cml', 'harness_literals.cml')]
     elif opts.suite == "lexer":
         opts.source = [ROOT / "src" / name for name in
                        ("support.cml", "tokens.cml", "lexer.cml")] + opts.source
@@ -142,8 +152,12 @@ def main():
     opts.test += extra_tests
     if opts.suite == "candle" and opts.source != candle_sources() + extra_sources:
         raise RuntimeError("Candle runner load order disagrees with sources.list")
+    source_text = public_program() if opts.suite in ('public', 'reader') else None
+    if opts.suite == 'reader':
+        source_text += '\n' + (ROOT / 'src' / 'reader.cml').read_text()
     return run(opts.source, opts.test, opts.timeout, opts.verbose, opts.executable,
-               source_text=public_program() if opts.suite == 'public' else None)
+               source_text=source_text,
+               runtime_dir=opts.runtime_dir)
 
 
 if __name__ == "__main__":

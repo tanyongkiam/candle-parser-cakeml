@@ -4,7 +4,7 @@ Ancestors
 Libs
   preamble mlstringSyntax[qualified]
 
-val _ = use "oracle_support.sml";
+val _ = load "oracle_support";
 (* Inputs are literal HOL terms and their native representation, not candidate
    expectations. Result products for build_letrec cross the exported-Ast ABI. *)
 val x = "(Var (Short «x»))";
@@ -25,8 +25,8 @@ val cases =
     "build_funapp (Ast.Ident (Ast.Short \"raise\")) [" ^ nx ^ "," ^ ny ^ "]",false),
    ("qualified-raise","build_funapp (Var (Long «Aa» (Short «raise»))) [" ^ x ^ "]",
     "build_funapp (Ast.Ident (Ast.Long \"Aa\" (Ast.Short \"raise\"))) [" ^ nx ^ "]",false),
-   ("annotated-raise","build_funapp (Lannot (Var (Short «raise»)) unknown_loc) [" ^ x ^ "]",
-    "build_funapp (Ast.Lannot (Ast.Ident (Ast.Short \"raise\")) CandleSupport.unknown_loc) [" ^ nx ^ "]",false),
+   ("annotated-raise","build_funapp (Lannot (Var (Short «raise»)) ast$NoLocs) [" ^ x ^ "]",
+    "build_funapp (Ast.Lannot (Ast.Ident (Ast.Short \"raise\")) Ast.Nolocs) [" ^ nx ^ "]",false),
    ("record-duplicate-fields","build_record_cons [«Aa»;«Rec»] [(«z»," ^ x ^ ");(«a»," ^ y ^ ");(«z»," ^ y ^ ")]",
     "build_record_cons [\"Aa\",\"Rec\"] [(\"z\"," ^ nx ^ "),(\"a\"," ^ ny ^ "),(\"z\"," ^ ny ^ ")]",false),
    ("record-empty-path","build_record_cons_id [«a»] []","build_record_cons_id [\"a\"] []",false),

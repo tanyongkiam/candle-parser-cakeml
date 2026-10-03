@@ -1,0 +1,183 @@
+(* Load after the public parser bundle in the generic CakeML REPL.
+   This optional I/O adapter is not part of the pure parser bundle. *)
+structure CandleReader = struct
+  local
+    val parse = CandleParser.parse;
+    val input = Repl.nextInput;
+    val eof = Repl.isEOF;
+    val error = Repl.errorMessage;
+    val reader = Repl.readNextString;
+    val poll = Interrupt.poll;
+    (* Reuse the generic reader's buffered stream, including input1 overrides. *)
+    val input1 = CakeML.input1;
+
+    (* compilerTheory.locs_to_string and its line/subsequence helpers.
+       Parser positions are nonnegative; HOL natural subtraction saturates. *)
+    fun nsub a b = if a < b then 0 else a - b;
+    fun find_next_newline n s =
+      if String.size s <= n then n
+      else if String.sub s n = #"\n" then n
+      else find_next_newline (n + 1) s;
+    fun safe_substring s n len =
+      let val size = String.size s in
+        if size <= n then ""
+        else if n + len <= size then String.substring s n len
+        else String.substring s n (size - n)
+      end;
+    fun get_nth_line row s n =
+      if row = 0 then safe_substring s n (nsub (find_next_newline n s) n)
+      else get_nth_line (row - 1) s (find_next_newline n s + 1);
+    fun copies n s =
+      let fun loop k acc = if k <= 0 then acc else loop (k - 1) (s::acc)
+      in loop n [] end;
+    fun locs_to_string source loc = case loc of
+        CandleParser.Locs (CandleParser.Posn row col) finish =>
+          let val line = get_nth_line row source 0
+              val stop = case finish of
+                  CandleParser.Posn last_row last_col =>
+                    if last_row = row then last_col else String.size line
+                | _ => String.size line
+              val underline = String.concat
+                (copies col " " @ copies (nsub stop col + 1) "^")
+          in String.concat ["line ", Int.toString (row + 1), "\n\n",
+              line, "\n", underline, "\n"] end
+      | _ => "unknown location";
+
+    (* Only phrase boundaries are recognized here. The parser decides whether
+       each unchanged phrase is legal, including malformed literals/comments. *)
+    fun phrases next_char =
+      let
+        val pending = Ref ([] : char list);
+        val ended = Ref False;
+        val consumed = Ref False;
+        fun get () = (poll (); case !pending of
+            c::rest => (pending := rest; consumed := True; Some c)
+          | [] => if !ended then None else
+              (case next_char () of
+                 None => (ended := True; None)
+               | Some c => (consumed := True; Some c)));
+        fun look n =
+          let fun read k acc = if k = 0 then List.rev acc else
+                case get () of None => List.rev acc | Some c => read (k - 1) (c::acc)
+              val chars = read n []
+          in pending := chars @ !pending; chars end;
+        fun peek () = case look 1 of [] => None | c::_ => Some c;
+        fun word_char c = Char.isAlphaNum c orelse c = #"_" orelse c = #"'";
+        (* Apostrophes also occur in identifiers and type variables. Look only
+           as far as this literal form requires; do not prefetch a next phrase. *)
+        fun char_tail () = case look 1 of
+            [#"\\"] =>
+              (case look 2 of
+                 [#"\\", #"x"] =>
+                   (case look 3 of [_,_,a] =>
+                      if not (Char.contains "0123456789abcdefABCDEF" a) then 0 else
+                      (case look 4 of [_,_,_,b] =>
+                         if Char.contains "0123456789abcdefABCDEF" b then
+                           (case look 5 of [_,_,_,_,#"'"] => 5 | _ => 0)
+                         else 0
+                       | _ => 0)
+                    | _ => 0)
+               | [#"\\", #"o"] =>
+                   (case look 3 of [_,_,a] =>
+                      if not (Char.contains "0123" a) then 0 else
+                      (case look 4 of [_,_,_,b] =>
+                         if not (Char.contains "01234567" b) then 0 else
+                         (case look 5 of [_,_,_,_,c] =>
+                            if Char.contains "01234567" c then
+                              (case look 6 of [_,_,_,_,_,#"'"] => 6 | _ => 0)
+                            else 0
+                          | _ => 0)
+                       | _ => 0)
+                    | _ => 0)
+               | [#"\\", c] =>
+                   if Char.isDigit c then
+                     (case look 3 of [_,_,b] =>
+                        if not (Char.isDigit b) then 0 else
+                        (case look 4 of [_,a,b,d] =>
+                           if Char.isDigit d andalso
+                             (Char.ord a - 48) * 100 + (Char.ord b - 48) * 10 + Char.ord d - 48 <= 255
+                           then (case look 5 of [_,_,_,_,#"'"] => 5 | _ => 0)
+                           else 0
+                         | _ => 0)
+                      | _ => 0)
+                   else if Char.contains "\\\"'nrtb " c then
+                     (case look 3 of [_,_,#"'"] => 3 | _ => 0)
+                   else 0
+               | _ => 0)
+          | _ => (case look 2 of [_,#"'"] => 2 | _ => 0);
+        fun phrase () =
+          let
+            val chars = Ref ([] : char list);
+            fun take () = case get () of
+                None => None
+              | Some c => (chars := c :: !chars; Some c);
+            fun consume n = if n = 0 then () else (take (); consume (n - 1));
+            fun finish () = case !chars of [] => None
+              | _ => Some (String.implode (List.rev (!chars)));
+            fun comment depth = case take () of
+                None => ()
+              | Some #"(" => if peek () = Some #"*" then
+                  (take (); comment (depth + 1)) else comment depth
+              | Some #"*" => if peek () = Some #")" then
+                  (take (); if depth = 0 then () else comment (depth - 1))
+                else comment depth
+              | _ => comment depth;
+            fun string_literal () = case take () of
+                None => ()
+              | Some #"\"" => ()
+              | Some #"\\" => (take (); string_literal ())
+              | _ => string_literal ();
+            fun word acc = case peek () of
+                Some c => if word_char c then (take (); word (c::acc))
+                  else String.implode (List.rev acc)
+              | None => String.implode (List.rev acc);
+            fun scan blocks brackets = case take () of
+                None => finish ()
+              | Some #"\"" => (string_literal (); scan blocks brackets)
+              | Some #"'" => (consume (char_tail ()); scan blocks brackets)
+              | Some #"(" => if peek () = Some #"*" then
+                  (take (); comment 0; scan blocks brackets)
+                else scan blocks (brackets + 1)
+              | Some #"[" => scan blocks (brackets + 1)
+              | Some #"{" => scan blocks (brackets + 1)
+              | Some #")" => scan blocks (nsub brackets 1)
+              | Some #"]" => scan blocks (nsub brackets 1)
+              | Some #"}" => scan blocks (nsub brackets 1)
+              | Some #";" => if peek () = Some #";" then
+                  (take (); if blocks = 0 andalso brackets = 0 then finish ()
+                    else scan blocks brackets)
+                else scan blocks brackets
+              | Some c => if Char.isAlpha c orelse c = #"_" then
+                  let val token = word [c]
+                      val nesting = if token = "begin" orelse token = "struct" orelse token = "sig"
+                        then blocks + 1 else if token = "end" then nsub blocks 1 else blocks
+                  in scan nesting brackets end
+                else scan blocks brackets
+          in
+            consumed := False;
+            (scan 0 0 handle ex =>
+              (* Framing context unwinds with the exception. Never reinterpret
+                 a consumed phrase's suffix as fresh code on the next call.
+                 Safe cancellation/draining is deliberately deferred. *)
+              (if !consumed then (pending := []; ended := True) else ();
+               raise ex))
+          end;
+      in phrase end;
+  in
+    fun install () =
+      let
+        val read_phrase = phrases (fn () => (!input1) ());
+        fun next () =
+          (* Clear the previous payload before I/O, even if this callback raises.
+             The REPL has already printed checking/evaluation diagnostics. *)
+          (input := Inr []; eof := False; error := "";
+           case read_phrase () of
+             None => eof := True
+           | Some source =>
+               (case parse source of
+                  Inr decs => input := Inr decs
+                | Inl (loc,message) => print
+                    (message ^ "\nParsing failed at " ^ locs_to_string source loc ^ "\n")))
+      in reader := next end;
+  end;
+end;

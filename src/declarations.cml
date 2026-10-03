@@ -5,17 +5,18 @@ structure CandleDeclarations = struct
   open CandleExpressions;
   val pragma_error = "CakeML pragmas are not supported by this Candle-only parser";
   fun build_rec_funs triple = case triple of (l,cn,fs) =>
-    let val vars = List.map (fn f => Ast.Ident (Ast.Short f)) fs
+    let val ast_locs = to_locs l
+        val vars = List.map (fn f => Ast.Ident (Ast.Short f)) fs
         val rhs = Ast.Con (Some (Ast.Short cn))
           (case vars of _::_::_ => [Ast.Con None vars] | _ => vars)
-        val constr = Ast.Dlet l (Ast.Pvar (mk_record_constr_name cn fs))
+        val constr = Ast.Dlet ast_locs (Ast.Pvar (mk_record_constr_name cn fs))
           (List.foldr (fn f => fn x => Ast.Fun f x) rhs fs)
         val pvars = List.map (fn f => Ast.Pvar f) fs
         val pat = Ast.Pcon (Some (Ast.Short cn))
           (case pvars of _::_::_ => [Ast.Pcon None pvars] | _ => pvars)
-        val projs = List.map (fn f => Ast.Dlet l (Ast.Pvar (mk_record_proj_name f cn))
+        val projs = List.map (fn f => Ast.Dlet ast_locs (Ast.Pvar (mk_record_proj_name f cn))
           (Ast.Fun "" (Ast.Mat (Ast.Ident (Ast.Short "")) [(pat,Ast.Ident (Ast.Short f))]))) fs
-        val upds = List.map (fn f => Ast.Dlet l (Ast.Pvar (mk_record_update_name f cn))
+        val upds = List.map (fn f => Ast.Dlet ast_locs (Ast.Pvar (mk_record_update_name f cn))
           (Ast.Fun "" (Ast.Mat (Ast.Ident (Ast.Short "")) [(pat,Ast.Fun f rhs)]))) fs
     in constr::(projs @ upds) end;
   fun distinct xs = case xs of [] => True | x::rest => not (member x rest) andalso distinct rest;
@@ -29,7 +30,7 @@ structure CandleDeclarations = struct
           let val (abbrevs,datas) = partition_types (List.rev tdefs)
           in if abbrevs <> [] andalso datas <> [] then
             Inl (l,"datatypes and type abbreviations cannot be made mutually recursive")
-          else let val abs = List.map (fn (loc,tvs,nm,ty) => Ast.Dtabbrev loc tvs nm ty) abbrevs
+          else let val abs = List.map (fn (loc,tvs,nm,ty) => Ast.Dtabbrev (to_locs loc) tvs nm ty) abbrevs
           in case datas of [] => Inr abs | _ =>
             let val defs = List.map sort_records datas
                 val recs = List.concat (List.map extract_record_defns defs)
@@ -37,16 +38,18 @@ structure CandleDeclarations = struct
               Inl (l,"record field names must be distinct")
             else let val recfuns = List.concat (List.map build_rec_funs recs)
                      val defs = List.map strip_record_fields defs
-                     val dt = Ast.Dtype l (List.map (fn (_,tvs,nm,cs) => (tvs,(nm,cs))) defs)
+                     val dt = Ast.Dtype (to_locs l) (List.map (fn (_,tvs,nm,cs) => (tvs,(nm,cs))) defs)
                  in Inr (dt::(abs @ recfuns)) end end end end))
       | _ => Inl (l,"Impossible: nTypeDefinition");
-  fun build_dlet l binds = List.map (fn b => case b of
-      Inl (Inl (c,fs),x) => Ast.Dlocal [Ast.Dlet l (Ast.Pvar " c") x]
-        (List.map (fn f => Ast.Dlet l (Ast.Pvar f)
+  fun build_dlet l binds =
+    let val ast_locs = to_locs l
+    in List.map (fn b => case b of
+      Inl (Inl (c,fs),x) => Ast.Dlocal [Ast.Dlet ast_locs (Ast.Pvar " c") x]
+        (List.map (fn f => Ast.Dlet ast_locs (Ast.Pvar f)
           (build_record_proj c f (Ast.Ident (Ast.Short " c")))) fs)
-    | Inl (Inr p,x) => Ast.Dlet l p x
-    | Inr (f,ps,bd) => Ast.Dlet l (Ast.Pvar f) (build_fun_lam bd ps)) binds;
-  fun ptree_ExprDec l pt = fmap (fn x => [Ast.Dlet l (Ast.Pvar "it") x]) (ptree_Expr NExpr pt);
+    | Inl (Inr p,x) => Ast.Dlet ast_locs p x
+    | Inr (f,ps,bd) => Ast.Dlet ast_locs (Ast.Pvar f) (build_fun_lam bd ps)) binds end;
+  fun ptree_ExprDec l pt = fmap (fn x => [Ast.Dlet (to_locs l) (Ast.Pvar "it") x]) (ptree_Expr NExpr pt);
   fun ptree_ModuleType pt = case pt of Lf (_,l) => Inl (l,"Expected a module-type declaration non-terminal")
     | Nd (n,l) args => if n <> Inl NModuleType then Inl (l,"Expected a module-type declaration non-terminal")
       else case args of [a] => bind (nterm_of a) (fn nt => case nt of
@@ -108,7 +111,7 @@ structure CandleDeclarations = struct
       | Inl NTopLet => (case args of [lt,bs] => bind (expect_tok lt LetT)
           (fn _ => fmap (build_dlet l) (ptree_LetBindings bs)) | _ => err "Impossible: nTopLet")
       | Inl NTopLetRec => (case args of [lt,rc,bs] => bind (check_tokens [(lt,LetT),(rc,RecT)])
-          (fn _ => fmap (fn binds => [Ast.Dletrec l (build_letrec binds)]) (ptree_LetRecBindings bs))
+          (fn _ => fmap (fn binds => [Ast.Dletrec (to_locs l) (build_letrec binds)]) (ptree_LetRecBindings bs))
         | _ => err "Impossible: nTopLetRec")
       | Inl NTypeDefinition => ptree_TypeDefinition pt
       | Inl NExcDefinition => fmap (fn d => [d]) (ptree_ExcDefinition pt)

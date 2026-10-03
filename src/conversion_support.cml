@@ -4,6 +4,10 @@ structure CandleConversionSupport = struct
   open CandleSupport;
   open CandleTokens;
   open CandleTree;
+  (* cmlPtreeConversion.to_locs: sentinels belong to parser errors, not Ast. *)
+  fun to_locs loc = case loc of
+      Locs (Posn r1 c1) (Posn r2 c2) => Ast.Locs (r1,c1) (r2,c2)
+    | _ => Ast.Nolocs;
   fun bind m f = case m of Inl e => Inl e | Inr x => f x;
   fun fmap f m = bind m (fn x => Inr (f x));
   fun choice m other = case m of Inl _ => other () | Inr x => Inr x;

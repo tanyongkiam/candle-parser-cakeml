@@ -30,7 +30,7 @@ and reference identity; do not overwrite them with candidate-generated answers.
 The interface remains pure:
 
 ```sml
-CandleParser.parse : string -> ((Ast.locs * string), Ast.dec list) sum
+CandleParser.parse : string -> ((CandleParser.locs * string), Ast.dec list) sum
 ```
 
 It remains an ordinary source-loaded module, usable outside a rebuilt CakeML

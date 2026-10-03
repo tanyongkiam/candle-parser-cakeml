@@ -1,6 +1,6 @@
 structure ExpandedCandleTests = struct
   val _ = ParserTests.check "expanded/counts"
-    (List.length inherited_golden = 210 andalso List.length expanded_golden = 712);
+    (List.length inherited_golden = 210 andalso List.length expanded_golden = 892);
   val _ = List.app (fn (name,test) => ParserTests.check ("inherited/" ^ name) (test ())) inherited_golden;
   val _ = List.app (fn (name,input,expected) => ParserTests.check
     ("expanded/" ^ name) (CandleParser.parse input = expected)) expanded_golden;

@@ -1,145 +1,129 @@
-# Handoff: Candle-only source-loaded parser
+# Handoff: Candle source-loaded parser
 
-Updated 2026-09-16. The public parser and all in-scope lowering are implemented.
-The current suite passes **1,832 exact independent HOL comparisons** in a fresh
-Ident-enabled REPL: 18 source files and 34 test files. Six real-input comparisons
-and the isolated baseline benchmark are complete. Final acceptance is tracked in
-[TEST_GAPS.md](TEST_GAPS.md); do not use the earlier Var-era blockers as current
-work instructions.
+## Current M7 state — 2026-10-03
 
-## Contract and scope
+The implementation uses the matching direct-AST M6 runtime. All nine real
+reader/Eval tests pass (26 fresh sessions), as do 46 framing checks, 18
+mid-phrase exception/Interrupt cases, eight harness units and both bundle
+visibility checks. The documented repository-root startup path also passes
+a fresh direct-AST evaluation check.
+
+Fresh current-reference HOL goldens, all 2,012 in-scope exact comparisons and
+the repeating 972-comparison public subset now pass. Both full-public negative
+controls fail only for their intended assertion, despite outer REPL status
+zero and a printed completion marker. Astra approves all six M7 gates; M7 is
+complete, with no remaining must-fix or over-engineering finding.
+[TEST_GAPS.md](TEST_GAPS.md) records the live checkpoint. September's
+1,832/792 results are historical, not evidence for the new runtime/location ABI.
+HOL usage is finished; the remaining audit uses stored evidence and native tests.
+M7 is approved for a local commit. Pushing requires separate approval.
+
+## Contract and settled scope
 
 ```sml
-CandleParser.parse : string -> ((Ast.locs * string), Ast.dec list) sum
+CandleParser.parse : string -> ((CandleParser.locs * string), Ast.dec list) sum
 ```
 
-The function is pure and returns the executable's existing Ast types.
-`Inl (location, message)` is failure; `Inr declarations` is success. It does
-not execute the AST, load files, expand quotations, or replace the REPL parser.
-This is not #1314 integration.
+This pure function returns existing Ast declarations: `Inr declarations`
+for success; `Inl (location, message)` for failure. Error types/constructors
+are public: `Posn`, `Unknownpt`, `Eofpt`, `Locs`. Successful annotation
+locations instead use `Ast.locs` with integer-pair coordinates or `Nolocs`,
+following the reference's `to_locs` boundary. Neither parser errors nor AST
+successes are converted back to source for reparsing.
 
-The user explicitly deferred the embedded CakeML parser. A reached
-`(*CML ... *)` declaration therefore returns a located unsupported-feature
-error. Misplaced pragmas can fail earlier in the ordinary grammar. This is the
-one deliberate fidelity exception, not original HOL behavior. Preserve the
-partial `cake_*.cml` files and original pragma goldens for later; they are not
-dependencies of the 18-file Candle bundle. Do not complete them as a side task.
+All 18 helper structures are hidden by `local ... in ... end`. The REPL's
+generated error-datatype printers `pp_locn` and `pp_locs` are the only
+additional permitted exports. `--internals` retains the development load order.
 
-Otherwise preserve original grammar, AST lowering, locations, error messages
-and known bugs. JUrban compatibility fixes and substantial optimization remain
-separate follow-on plans: [COMPATIBILITY_PLAN.md](COMPATIBILITY_PLAN.md) first,
-then [PERFORMANCE_PLAN.md](PERFORMANCE_PLAN.md) against the corrected baseline.
+A reached `(*CML ... *)` declaration returns the explicit located unsupported
+error. Misplaced pragmas may fail earlier. This is the deliberate fidelity
+exception: preserve reference grammar, lowering, locations, error messages and
+known quirks otherwise. Interactive file loading and quotation expansion are
+excluded. Preserve partial `cake_*.cml` source and original CML fixtures;
+do not port the embedded CakeML parser as a side task.
 
-## Run and inspect
+## Optional direct-AST reader
 
-From this project root (the current `parse/` directory):
+Load `src/reader.cml` after the pure bundle and call `CandleReader.install ()`.
+This new I/O glue is deliberately outside `sources.list`; only `install`
+is authored public API. It captures the original Repl slots, frames unchanged
+bytes, calls the public parser and supplies successful ASTs through `Inr`.
+Parse failures print one located diagnostic and submit empty declarations,
+clearing stale payloads while keeping EOF distinct.
+
+The approved small policy retries input exceptions before any framing byte is
+consumed. After any consumed byte/lookahead, it propagates the exception and
+returns EOF on the next callback without reading the cancelled suffix.
+Sophisticated safe draining is deferred. Completed-phrase parse/type/check/
+evaluation failures remain recoverable. Mid-phrase injected exceptions and a
+real OS SIGINT through polling/FFI validate fail-closed behavior.
+
+The reader configures the existing callback, not a new compiler protocol or
+replacement compiled parser. M8, not M7, retires the bootstrap OCaml parser.
+
+## Reproduce
+
+Use this directory as the standalone repository root. Runtime hashes and the
+only assembly adjustment (larger bitmap buffer) are in
+[runtime/README.md](runtime/README.md). Keep the executable, configuration and
+boot files matched, and start it from this root. Native linking does not require
+HOL or a compiler bootstrap.
 
 ```sh
-python3 tools/run_tests.py --suite candle
-python3 tools/test_harness.py
-# Optional preserved CakeML-layer regressions, not a full embedded parser:
-python3 tools/run_tests.py --suite all
-# Negative control: MUST fail with negative/changed-identifier.
-python3 tools/run_tests.py --suite candle --test tests/parser_negative.cml
+make
+CML_HEAP_SIZE=16384 ./cake-ast-parse-ident --repl
 ```
 
-Interactive loading instructions are in [README.md](README.md). The bundle
-generator `tools/load_parser.py` uses [sources.list](sources.list), then the
-public call can be made directly. Loading individual files through the supplied
-`#use` reader has also been checked in a fresh REPL.
+Then enter CakeML startup commands:
 
-Use **cake-ast-parse-ident**, from this project root, with its active matching
-`config_enc_str.txt`. The test/benchmark drivers default to a 16 GiB heap for
-source compilation. The larger bitmap buffer is separately documented in
-[runtime/README.md](runtime/README.md), together with exact hashes and rebuilding.
-Old executables/configuration remain only in the development workspace, not
-the standalone commit. The committed newest assembly and matching configuration
-build the active executable with `make` or `make runtime`.
-No HOL/compiler bootstrap is needed to load parser source.
+```sml
+#use "build/candle-parser.cml";
+#use "src/reader.cml";
+CandleReader.install ();
+```
 
-The default generated bundle now wraps all helpers in `local ... in ... end`
-and exports only `CandleParser.parse`. `--internals` retains the old development
-bundle; existing sub-tests load individual modules unchanged. The new `public`
-suite repeats 792 public-API goldens behind the hidden boundary. `test_bundle.py`
-checks all 17 helpers are undefined after fresh `#use` loading, and that the
-only printed Candle export is `CandleParser.parse`.
+After installation enter raw Candle phrases terminated by `;;`.
+Without installing the reader, use `CandleParser.parse "let id x = x;;";`
+in the unchanged CakeML REPL.
 
-Treat this whole directory as the future repository root. `make bundle`,
-`make runtime` and `make test` work here without the surrounding CakeML checkout.
-See [STANDALONE.md](STANDALONE.md) for extraction and the optional external
-`CAKEML_ROOT` configuration for regenerating HOL reference results.
+```sh
+make test
+# Both commands below MUST fail for their intended named assertion only:
+python3 tools/run_tests.py --suite public --test tests/parser_negative.cml
+python3 tools/run_tests.py --suite public --test tests/error_negative.cml
+```
 
-## Evidence and provenance
+All suites, visibility checks and negative controls honor
+`CANDLE_PARSER_EXECUTABLE` and `CANDLE_PARSER_RUNTIME_DIR` together.
+[tests/README.md](tests/README.md) gives count gates, scope exclusions,
+coverage mapping, strict diagnostic checks and independent oracle commands.
+Preserved `cake*`/`all` entry points retain the old location ABI and are not
+current M7-supported commands.
 
-- Earlier Candle layers: 615 comparisons.
-- Full expressions: 134; in-scope declarations: 50; initial public inputs: 60.
-- All 214 active HOL test inputs accounted for: 210 compared, four pragmas deferred.
-- Expanded public wrappers/products/mutations: 712, with 475 successes and 237 failures.
-- Direct lowering helpers: 31.
-- Real corpus: six successful exact comparisons.
-- Conditional/tuple/precedence controls: 14, with ten successes and four failures.
+## Provenance and follow-on work
 
-These counts overlap layer/public views and earlier regressions; they are not
-1,832 distinct programs. Goldens compare complete constructor-valued ASTs,
-including annotations and locations, or exact located errors. Parsed programs
-are never executed. Finite comparisons are not a formal equivalence proof.
+[src/README.md](src/README.md) maps all 24 ported files and the new reader glue
+to upstream definitions without fragile line numbers, and records representation/
+refactoring adaptations. Eighteen files form the pure Candle bundle; six are
+deferred embedded CakeML work. This is a hand-written executable-definition
+port, not a mechanical exporter: do not introduce a translator or another AST.
 
-The independent oracle builds all succeeded: `afc19b02` (restored AST fixtures),
-`cb989c16` (inherited/expanded), `e3ac3285` (helpers), `c54b26f3` (records/boot),
-and `935b571e` (additional corpus/conditional controls). None is still running.
-Fixture regeneration and input-generator commands are in
-[tests/README.md](tests/README.md); expected results never come from the candidate.
+Ast fields preserve nested binary pairs; private metadata can use flat tuples.
+Variables use real `Ast.Ident`; Candle source constructors named `Var`
+are unrelated. Parser-owned locations preserve unknown/EOF markers separately
+from AST annotations. Current reference/copy identities are in
+[SOURCES.tsv](SOURCES.tsv); frozen corpus snapshots are intentionally distinct
+from migrated active boot files. All 33 current reference/copied/frozen asset
+hashes were rechecked and matched.
 
-The raw records and two-pragma boot projection have 20/42 declarations.
-The other corpus inputs are complete fib/streams regression files and exact
-prefixes of locally available HOL Light lib/basics files. Their hashes and
-excerpt boundaries are retained in [tests/corpus](tests/corpus/README.md).
-This is not whole-HOL-Light, raw-boot, quotation-expansion or Flyspeck acceptance.
+[STANDALONE.md](STANDALONE.md) explains self-contained assets and optional
+external CakeML/HOL requirements for regeneration. Normal tests need stored
+fixtures, not upstream sources or network access. Never derive expectations
+from candidate output. Corpus equality does not execute the frozen programs;
+real reader/Eval tests do execute their bounded self-checking inputs.
 
-Conditional controls preserve the locally documented limitation associated with
-#1019. The bare addition and second-tuple-component cases came from local donor
-commit `51513f0dfb3bcf169c8342de6efd04e5b7b4e00b`; neighboring controls were
-authored explicitly. The issue body was not retrieved, so do not describe these
-as verified verbatim issue examples or as a compatibility fix.
-
-## Source map and adaptations
-
-[src/README.md](src/README.md) maps every one of the 24 ported files to original
-sources without fragile source line-number pointers. Eighteen are in the Candle
-bundle; six are preserved/deferred CakeML work. The implementation is a direct
-hand-written executable-definition port, not a mechanical exporter output.
-Do not build a new translator/exporter as part of maintaining it.
-
-The adaptation ledger records grammar vectors/chunking, the PEG continuation
-machine, natural-number arithmetic, helper factoring, lazy alternatives and
-private representation changes. Runtime Ast products require nested binary
-pairs, whereas private metadata can use native flat tuples. The oracle adapter
-was corrected accordingly. Variables use real `Ast.Ident`; the source Candle
-constructor named `Var` is unrelated and must not be renamed.
-
-Original HOL sources remain read-only. All 24 read-only reference hashes in
-[SOURCES.tsv](SOURCES.tsv) were rechecked. Its Ast row was deliberately updated
-for the user's already-committed non-inferior Var overload; the old hash and
-exact one-line change are documented in `runtime/README.md`. Parser-definition
-hashes did not change.
-
-## Performance and remaining limits
-
-[BENCHMARKS.md](BENCHMARKS.md) records isolated startup/loading/batched parsing,
-raw JSON samples and environment/source hashes. The earlier calibrated baseline measured
-about 8 ms for records and 138 ms for the 24 KB boot projection; parser loading
-took about 5.8 seconds. These are host-wall estimates with visible variability,
-not a speedup comparison or parser-only memory measurements.
-
-The standalone hidden-bundle rerun is stored separately as `benchmark-public.json`
-and `benchmark-public-environment.json`: approximately 2.4 s parser loading,
-6 ms records and 106 ms boot projection. It verifies the packaged loading path,
-not a controlled attribution of speedup to `local` encapsulation. A relocated
-cache-free project rebuilt its runtime byte-identically and passed `make test`.
-
-No port-specific asymptotic regression was identified in the bounded scaling
-and source audit. Arbitrary-input linearity, maximum depth/file size, very large
-HOL Light/Flyspeck workloads and minimum source-loading heap are not established.
-Inherited PEG backtracking and or-pattern expansion can still be expensive.
-No compatibility fix or parser performance rewrite was applied during this
-golden-test expansion.
+Finite goldens are strong evidence, not a proof for every string or unbounded
+size/depth. Historical measurements in [BENCHMARKS.md](BENCHMARKS.md) do not
+establish current-runtime performance. JUrban work in
+[COMPATIBILITY_PLAN.md](COMPATIBILITY_PLAN.md) precedes
+[PERFORMANCE_PLAN.md](PERFORMANCE_PLAN.md); neither is part of M7.

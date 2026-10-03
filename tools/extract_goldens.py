@@ -40,11 +40,11 @@ def main():
         "exception": "Ast.dec", "unit": "unit",
     }
     annotation = (" : (CandleGrammar.nonterm * string * string * "
-                  f"((Ast.locs * string),{result_types[args.kind]}) sum) list"
+                  f"((CandleLocation.locs * string),{result_types[args.kind]}) sum) list"
                   if args.kind in result_types else "")
     if args.kind == "cakegrammar":
         annotation = (" : (CakeGrammar.nonterm * string * "
-                      "((CakeTokens.token * Ast.locs) list,"
+                      "((CakeTokens.token * CandleLocation.locs) list,"
                       "CakeGrammar.ptree list,string) CandlePeg.result) list")
     if args.kind == "cakeconversion":
         annotation = (" : (CakeGrammar.nonterm * string * string * "

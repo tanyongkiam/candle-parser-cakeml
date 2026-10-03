@@ -1,0 +1,5 @@
+(* Intentionally incorrect error location: this separate invocation MUST fail. *)
+val _ = case CandleParser.parse "let = ;;" of
+    Inl (loc,_) => ParserTests.check "negative/changed-error-location"
+      (loc = CandleParser.Locs (CandleParser.Posn 99 99) (CandleParser.Posn 99 99))
+  | Inr _ => ParserTests.check "negative/expected-parser-error" False;

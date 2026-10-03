@@ -3,11 +3,7 @@ structure ParserTests = struct
     if ok then () else
       (print ("TEST_FAILED: " ^ name ^ "\n"); raise Fail name);
 
-  val loc = Ast.Locs Ast.Unknownpt Ast.Unknownpt;
+  val loc = Ast.Nolocs;
   val sample = [Ast.Dlet loc (Ast.Pvar "x") (Ast.Lit (Ast.Intlit 1))];
-  val error_sample : ((Ast.locs * string), Ast.dec list) sum =
-    Inl (loc, "test error");
-  val success_sample : ((Ast.locs * string), Ast.dec list) sum = Inr sample;
   val _ = check "Ast equality" (sample = sample);
-  val _ = check "result distinction" (error_sample <> success_sample);
 end;

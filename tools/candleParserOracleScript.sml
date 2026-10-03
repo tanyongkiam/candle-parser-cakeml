@@ -4,7 +4,7 @@ Ancestors
 Libs
   preamble mlstringSyntax[qualified]
 
-val _ = use "oracle_support.sml";
+val _ = load "oracle_support";
 
 val cases = [
   ("empty", ""),
@@ -31,7 +31,7 @@ fun oracle (name,source) = let
 in
   print ("LEX_GOLDEN " ^ "(" ^ quoted name ^ "," ^ quoted source ^ "," ^ value lexed ^ "),\n");
   print ("TREE_GOLDEN " ^ "(" ^ quoted name ^ "," ^ quoted source ^ "," ^ value tree ^ "),\n");
-  print ("PARSE_GOLDEN " ^ "(" ^ quoted name ^ "," ^ quoted source ^ "," ^ value parsed ^ "),\n")
+  print ("PARSE_GOLDEN " ^ "(" ^ quoted name ^ "," ^ quoted source ^ "," ^ public_value parsed ^ "),\n")
 end;
 val _ = List.app oracle cases;
 
@@ -350,24 +350,24 @@ val cake_helper_cases = [
   ("seq-one",``cmlPtreeConversion$Eseq_encode [(ast$Lit (ast$IntLit 1))]``),
   ("seq-three",``cmlPtreeConversion$Eseq_encode [(ast$Lit (ast$IntLit 1));(ast$Lit (ast$IntLit 2));(ast$Lit (ast$IntLit 3))]``),
   ("strip-plain",``cmlPtreeConversion$strip_loc_expr (ast$Lit (ast$IntLit 1))``),
-  ("strip-one",``cmlPtreeConversion$strip_loc_expr (ast$Lannot (ast$Lit (ast$IntLit 1)) (location$Locs (location$POSN 1 2) (location$POSN 1 5)))``),
-  ("strip-nested",``cmlPtreeConversion$strip_loc_expr (ast$Lannot (ast$Lannot (ast$Lit (ast$IntLit 1)) (location$Locs (location$POSN 1 2) (location$POSN 1 5))) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("merge-none",``cmlPtreeConversion$merge_locsopt NONE (SOME (location$Locs (location$POSN 1 2) (location$POSN 1 5)))``),
-  ("merge-some",``cmlPtreeConversion$merge_locsopt (SOME (location$Locs (location$POSN 1 2) (location$POSN 1 5))) (SOME (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("annot-none",``cmlPtreeConversion$optLannot NONE (ast$Lannot (ast$Lit (ast$IntLit 1)) (location$Locs (location$POSN 1 2) (location$POSN 1 5)))``),
-  ("annot-some",``cmlPtreeConversion$optLannot (SOME (location$Locs (location$POSN 2 3) (location$POSN 2 8))) (ast$Lannot (ast$Lit (ast$IntLit 1)) (location$Locs (location$POSN 1 2) (location$POSN 1 5)))``),
-  ("bind-existing",``cmlPtreeConversion$bind_loc (ast$Lannot (ast$Lit (ast$IntLit 1)) (location$Locs (location$POSN 1 2) (location$POSN 1 5))) (location$Locs (location$POSN 2 3) (location$POSN 2 8))``),
-  ("bind-new",``cmlPtreeConversion$bind_loc (ast$Lit (ast$IntLit 1)) (location$Locs (location$POSN 1 2) (location$POSN 1 5))``),
-  ("apply-ref",``cmlPtreeConversion$mkAst_App (ast$Con (SOME (namespace$Short «Ref»)) []) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("apply-annot-ref",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$Con (SOME (namespace$Short «Ref»)) []) (location$Locs (location$POSN 1 2) (location$POSN 1 5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("apply-ref-with-arg",``cmlPtreeConversion$mkAst_App (ast$Con (SOME (namespace$Short «Ref»)) [(ast$Lit (ast$IntLit 1))]) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
+  ("strip-one",``cmlPtreeConversion$strip_loc_expr (ast$Lannot (ast$Lit (ast$IntLit 1)) (ast$Locs (1,2) (1,5)))``),
+  ("strip-nested",``cmlPtreeConversion$strip_loc_expr (ast$Lannot (ast$Lannot (ast$Lit (ast$IntLit 1)) (ast$Locs (1,2) (1,5))) (ast$Locs (2,3) (2,8)))``),
+  ("merge-none",``cmlPtreeConversion$merge_locsopt NONE (SOME (ast$Locs (1,2) (1,5)))``),
+  ("merge-some",``cmlPtreeConversion$merge_locsopt (SOME (ast$Locs (1,2) (1,5))) (SOME (ast$Locs (2,3) (2,8)))``),
+  ("annot-none",``cmlPtreeConversion$optLannot NONE (ast$Lannot (ast$Lit (ast$IntLit 1)) (ast$Locs (1,2) (1,5)))``),
+  ("annot-some",``cmlPtreeConversion$optLannot (SOME (ast$Locs (2,3) (2,8))) (ast$Lannot (ast$Lit (ast$IntLit 1)) (ast$Locs (1,2) (1,5)))``),
+  ("bind-existing",``cmlPtreeConversion$bind_loc (ast$Lannot (ast$Lit (ast$IntLit 1)) (ast$Locs (1,2) (1,5))) (ast$Locs (2,3) (2,8))``),
+  ("bind-new",``cmlPtreeConversion$bind_loc (ast$Lit (ast$IntLit 1)) (ast$Locs (1,2) (1,5))``),
+  ("apply-ref",``cmlPtreeConversion$mkAst_App (ast$Con (SOME (namespace$Short «Ref»)) []) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
+  ("apply-annot-ref",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$Con (SOME (namespace$Short «Ref»)) []) (ast$Locs (1,2) (1,5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
+  ("apply-ref-with-arg",``cmlPtreeConversion$mkAst_App (ast$Con (SOME (namespace$Short «Ref»)) [(ast$Lit (ast$IntLit 1))]) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
   ("apply-con-plain",``cmlPtreeConversion$mkAst_App (ast$Con (SOME (namespace$Short «C»)) []) (ast$Lit (ast$IntLit 1))``),
-  ("apply-con-both-located",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$Con (SOME (namespace$Short «C»)) []) (location$Locs (location$POSN 1 2) (location$POSN 1 5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("apply-con-one-located",``cmlPtreeConversion$mkAst_App (ast$Con (SOME (namespace$Short «C»)) []) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("apply-tuple",``cmlPtreeConversion$mkAst_App (ast$Con NONE [(ast$Lit (ast$IntLit 1))]) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("apply-ffi",``cmlPtreeConversion$mkAst_App (ast$App (ast$FFI «foo») [(ast$Lit (ast$IntLit 1))]) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("apply-located-ffi",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$App (ast$FFI «foo») []) (location$Locs (location$POSN 1 2) (location$POSN 1 5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
-  ("apply-ordinary",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$Lit (ast$IntLit 1)) (location$Locs (location$POSN 1 2) (location$POSN 1 5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (location$Locs (location$POSN 2 3) (location$POSN 2 8)))``),
+  ("apply-con-both-located",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$Con (SOME (namespace$Short «C»)) []) (ast$Locs (1,2) (1,5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
+  ("apply-con-one-located",``cmlPtreeConversion$mkAst_App (ast$Con (SOME (namespace$Short «C»)) []) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
+  ("apply-tuple",``cmlPtreeConversion$mkAst_App (ast$Con NONE [(ast$Lit (ast$IntLit 1))]) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
+  ("apply-ffi",``cmlPtreeConversion$mkAst_App (ast$App (ast$FFI «foo») [(ast$Lit (ast$IntLit 1))]) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
+  ("apply-located-ffi",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$App (ast$FFI «foo») []) (ast$Locs (1,2) (1,5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
+  ("apply-ordinary",``cmlPtreeConversion$mkAst_App (ast$Lannot (ast$Lit (ast$IntLit 1)) (ast$Locs (1,2) (1,5))) (ast$Lannot (ast$Lit (ast$IntLit 2)) (ast$Locs (2,3) (2,8)))``),
   ("apply-nonffi-app",``cmlPtreeConversion$mkAst_App (ast$App ast$Opref [(ast$Lit (ast$IntLit 1))]) (ast$Lit (ast$IntLit 2))``),
   ("let-any",``cmlPtreeConversion$letFromPat ast$Pany (ast$Lit (ast$IntLit 1)) (ast$Lit (ast$IntLit 2))``),
   ("let-var-pattern",``cmlPtreeConversion$letFromPat (ast$Pvar «x») (ast$Lit (ast$IntLit 1)) (ast$Lit (ast$IntLit 2))``),
@@ -835,7 +835,7 @@ fun public_oracle (name,source) = let
   val input = stringSyntax.lift_string bool source;
   val result = rhs (concl (EVAL ``caml_parser$run ^input``));
 in print ("PARSE_GOLDEN (" ^ quoted name ^ "," ^ quoted source ^ "," ^
-          value result ^ "),\n") end;
+          public_value result ^ "),\n") end;
 val _ = List.app (fn (name,nt,conv,source) =>
   layer_oracle "DECL_GOLDEN" (nt,conv,[source])) deferred_declaration_cases;
 val _ = List.app (fn (name,nt,conv,source) =>

@@ -1,0 +1,200 @@
+(* Adapter unit checks only: independent parser goldens and actual REPL/Eval
+   integration are separate gates. No parser/framer internals are exposed. *)
+structure CandleReaderTests = struct
+  local
+    val input = Repl.nextInput;
+    val eof = Repl.isEOF;
+    val error = Repl.errorMessage;
+    val reader = Repl.readNextString;
+    val input1 = CakeML.input1;
+    val saved_reader = !reader;
+    val saved_input1 = !input1;
+    val saved_input = !input;
+    val saved_eof = !eof;
+    val saved_error = !error;
+    exception ReadPastBoundary;
+    exception ReaderFailure;
+    val frames = Ref 0;
+    val interrupted = Ref 0;
+    fun check name ok = ParserTests.check ("reader/" ^ name) ok;
+    fun expected name source = case CandleParser.parse source of
+        Inr decs => decs
+      | Inl (_,message) => (check (name ^ "/unit-source-must-parse: " ^ message) False; []);
+    fun read_expected name source =
+      let val decs = expected name source in
+        input := Inl "stale payload"; eof := True; error := "old diagnostic";
+        (!reader) ();
+        check (name ^ "/payload") (!input = Inr decs);
+        check (name ^ "/flags") (not (!eof) andalso !error = "");
+        frames := !frames + 1
+      end;
+    (* The first read is forbidden from touching any byte of the next phrase.
+       Returning EOF at that boundary would conceal an accidental over-read. *)
+    fun pair name first second =
+      let val source = first ^ second
+          val position = Ref 0
+          val boundary = Ref (String.size first)
+          val eof_reads = Ref 0
+          fun next () =
+            if !position = String.size source then
+              (eof_reads := !eof_reads + 1; None)
+            else if !position >= !boundary then raise ReadPastBoundary
+            else let val c = String.sub source (!position) in
+              position := !position + 1; Some c
+            end
+      in
+        input1 := next;
+        CandleReader.install ();
+        check (name ^ "/install-does-not-read")
+          (!position = 0 andalso !eof_reads = 0);
+        read_expected (name ^ "/first") first;
+        check (name ^ "/first-boundary")
+          (!position = String.size first andalso !eof_reads = 0);
+        boundary := String.size source;
+        read_expected (name ^ "/second") second;
+        check (name ^ "/second-boundary")
+          (!position = String.size source andalso !eof_reads = 0);
+        (!reader) ();
+        check (name ^ "/eof") (!eof andalso !input = Inr [] andalso !error = "");
+        (!reader) ();
+        check (name ^ "/repeat-eof") (!eof andalso !eof_reads = 1)
+      end;
+    fun residual name source =
+      let val position = Ref 0
+          val eof_reads = Ref 0
+          fun next () = if !position = String.size source then
+              (eof_reads := !eof_reads + 1; None)
+            else let val c = String.sub source (!position) in
+              position := !position + 1; Some c
+            end
+      in
+        input1 := next;
+        CandleReader.install ();
+        check (name ^ "/install-does-not-read")
+          (!position = 0 andalso !eof_reads = 0);
+        read_expected name source;
+        check (name ^ "/consumed") (!position = String.size source);
+        (!reader) ();
+        check (name ^ "/eof") (!eof andalso !input = Inr []);
+        check (name ^ "/single-eof-read") (!eof_reads = 1)
+      end;
+    fun failing_input name exn =
+      let val source = "let recovered = 7;;"
+          val position = Ref 0
+          val fail_once = Ref True
+          fun next () = if !fail_once then
+              (fail_once := False; raise exn)
+            else if !position = String.size source then None
+            else let val c = String.sub source (!position) in
+              position := !position + 1; Some c
+            end
+          val _ = input1 := next
+          val _ = CandleReader.install ()
+          val _ = check (name ^ "/install-does-not-read")
+            (!fail_once andalso !position = 0)
+          val _ = input := Inl "stale payload"
+          val _ = eof := True
+          val _ = error := "old diagnostic"
+          val raised = ((!reader) (); False)
+            handle ReaderFailure => name = "input-exception"
+                 | Interrupt => name = "input-interrupt"
+      in
+        check (name ^ "/propagated") raised;
+        check (name ^ "/cleared")
+          (!input = Inr [] andalso not (!eof) andalso !error = "");
+        read_expected (name ^ "/recovery") source
+      end;
+    fun interrupted_phrase name prefix suffix exn =
+      let val source = prefix ^ suffix
+          val position = Ref 0
+          val calls = Ref 0
+          val fail_once = Ref True
+          fun next () =
+            (calls := !calls + 1;
+             if !position = String.size prefix andalso !fail_once then
+               (fail_once := False; raise exn)
+             else if !position = String.size source then None
+             else let val c = String.sub source (!position) in
+               position := !position + 1; Some c
+             end)
+          val _ = input1 := next
+          val _ = CandleReader.install ()
+          val _ = check (name ^ "/install-does-not-read") (!calls = 0)
+          val _ = input := Inl "stale payload"
+          val _ = eof := True
+          val _ = error := "old diagnostic"
+          val raised = ((!reader) (); False)
+            handle ReaderFailure => True | Interrupt => True
+          val count = !calls
+      in
+        check (name ^ "/propagated") raised;
+        check (name ^ "/interruption-position")
+          (!position = String.size prefix andalso not (!fail_once));
+        check (name ^ "/cleared")
+          (!input = Inr [] andalso not (!eof) andalso !error = "");
+        (!reader) ();
+        check (name ^ "/terminated-without-reading-suffix")
+          (!eof andalso !input = Inr [] andalso !error = "" andalso !calls = count);
+        (!reader) ();
+        check (name ^ "/repeat-eof-without-reading")
+          (!eof andalso !input = Inr [] andalso !calls = count);
+        interrupted := !interrupted + 1
+      end;
+    fun restore () =
+      (reader := saved_reader; input1 := saved_input1; input := saved_input;
+       eof := saved_eof; error := saved_error);
+  in
+    val _ = (let
+      val _ = List.app (fn (name,source) =>
+        pair name source "let next_phrase = 2;;")
+        [("plain","let first = 1;;"),
+         ("multiline","(* leading comment *)\nlet pair = (\n1,\n2\n);;"),
+         ("crlf","let first =\r\n1;;"),
+         ("nested-comment","(* outer ;; (* inner ;; *) end *)let first = 1;;"),
+         ("string-delimiter","let text = \";; begin struct sig end\";;"),
+         ("escaped-quote","let text = \"a\\\";;b\";;"),
+         ("char-semicolon","let letter = ';';;"),
+         ("char-quote","let letter = '\\'';;"),
+         ("char-backslash","let letter = '\\\\';;"),
+         ("char-newline","let letter = '\\n';;"),
+         ("char-hex","let letter = '\\x41';;"),
+         ("char-octal","let letter = '\\o101';;"),
+         ("char-decimal","let letter = '\\065';;"),
+         ("type-variable","type 'a wrapper = Wrap of 'a;;"),
+         ("identifier-apostrophe","let value' = 1;;"),
+         ("begin","let first = begin 1; 2 end;;"),
+         ("brackets","let first = [1; 2];;"),
+         ("record","type point = Point of {x : int; y : int};;"),
+         ("module","module Mod = struct let value = 1;; end;;"),
+         ("nested-module","module Mod = struct module Nested = struct let value = 1;; end;; end;;"),
+         ("signature","module type S = sig val value : int end;;")];
+      val _ = residual "residual" "let last = 3";
+      val _ = residual "residual-whitespace" " \n\r\t";
+      val _ = input1 := (fn () => None);
+      val _ = CandleReader.install ();
+      val _ = (!reader) ();
+      val _ = check "empty" (!eof andalso !input = Inr [] andalso !error = "");
+      val _ = failing_input "input-exception" ReaderFailure;
+      (* This checks propagation of an input-raised Interrupt, not delivery of
+         SIGINT or the real polling-frequency/FFI path. Those remain runtime gates. *)
+      val _ = failing_input "input-interrupt" Interrupt;
+      val _ = List.app (fn (name,prefix,suffix) =>
+        (interrupted_phrase (name ^ "/exception") prefix suffix ReaderFailure;
+         interrupted_phrase (name ^ "/interrupt") prefix suffix Interrupt))
+        [("comment", "(* prefix ", "let leaked = 7;; *) let good = 8;;"),
+         ("nested-comment", "(* outer (* inner ", "let leaked = 7;; *) *) let good = 8;;"),
+         ("string", "let text = \"prefix ", "let leaked = 7;;\";; let good = 8;;"),
+         ("string-escape", "let text = \"prefix\\", "\";;\";; let good = 8;;"),
+         ("char-lookahead", "let letter = '\\x4", "1';; let good = 8;;"),
+         ("comment-lookahead", "(", "* let leaked = 7;; *) let good = 8;;"),
+         ("delimiter-lookahead", "let cancelled = 1;", "; let good = 8;;"),
+         ("nested-block", "module M = struct let cancelled = 1;; ", "end;; let good = 8;;"),
+         ("nested-bracket", "let cancelled = [1; ", "2];; let good = 8;;")];
+      val _ = check "frame-count" (!frames = 46);
+      val _ = check "interruption-count" (!interrupted = 18);
+    in
+      restore ();
+      print "CANDLE_READER_UNIT_OK frames=46 interruptions=18\n"
+    end) handle exn => (restore (); raise exn);
+  end;
+end;
